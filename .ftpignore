@@ -1,0 +1,17 @@
+.git
+.env
+.env.backup
+.env.production
+node_modules
+storage/logs/*.log
+storage/framework/cache/data/*
+storage/framework/sessions/*
+storage/framework/views/*
+tests
+.phpunit.cache
+.phpunit.result.cache
+.DS_Store
+npm-debug.log
+yarn-error.log
+storage/app/firebase-credentials.json
+

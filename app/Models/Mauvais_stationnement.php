@@ -1,0 +1,21 @@
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
+
+class Mauvais_stationnement extends Model
+{
+    use HasFactory;
+	
+	public function vehicule()
+    {
+        return $this->belongsTo(Vehicule::class, 'vehicule_id');
+    }
+		
+	public function user()
+    {
+        return $this->belongsTo(User::class, 'user_id');
+    }
+}
