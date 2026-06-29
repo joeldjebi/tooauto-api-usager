@@ -157,14 +157,14 @@ class AutodocController extends Controller
         try {
             // Validation des données
             $validator = Validator::make($request->all(), [
-                'images' => 'nullable|array|max:4', // Autoriser jusqu'à 4 images
-                'images.*' => 'file|image|max:12048', // Taille max de 12MB
+                'images' => 'nullable|array|max:4', // Autoriser jusqu'à 4 fichiers
+                'images.*' => 'file|mimes:jpeg,png,jpg,gif,webp,pdf|max:12048', // Images ou PDF, taille max de 12MB
                 'vehicule_id' => 'nullable|exists:vehicules,id',
                 'type_docauto_id' => 'required|exists:type_docautos,id',
             ], [
-                'images.max' => 'Vous pouvez télécharger jusqu\'à 4 images.',
-                'images.*.image' => 'Chaque fichier doit être une image valide.',
-                'images.*.max' => 'La taille maximale pour chaque image est de 12 MB.',
+                'images.max' => 'Vous pouvez télécharger jusqu\'à 4 fichiers.',
+                'images.*.mimes' => 'Chaque fichier doit être une image valide ou un document PDF.',
+                'images.*.max' => 'La taille maximale pour chaque fichier est de 12 MB.',
                 'vehicule_id.exists' => 'Le véhicule sélectionné est invalide.',
                 'type_docauto_id.exists' => 'Le type de pièce sélectionné est invalide.',
             ]);
@@ -198,7 +198,7 @@ class AutodocController extends Controller
                 $autodoc->provenance = 'flotte';
             }
 
-            // Gestion des images
+            // Gestion des images et PDF
             if ($request->hasFile('images')) {
                 $imagesPaths = [];
                 foreach ($request->file('images') as $photo) {
@@ -211,7 +211,7 @@ class AutodocController extends Controller
                     } catch (\Exception $e) {
                         return response()->json([
                             'success' => false,
-                            'message' => 'Erreur lors du téléchargement des images.',
+                            'message' => 'Erreur lors du téléchargement des fichiers.',
                             'error' => $e->getMessage(),
                         ], 500);
                     }
@@ -244,14 +244,14 @@ class AutodocController extends Controller
         try {
             // Validation des données
             $validator = Validator::make($request->all(), [
-                'images' => 'nullable|array|max:4', // Autoriser jusqu'à 4 images
-                'images.*' => 'file|image|max:12048', // Taille max de 12MB
+                'images' => 'nullable|array|max:4', // Autoriser jusqu'à 4 fichiers
+                'images.*' => 'file|mimes:jpeg,png,jpg,gif,webp,pdf|max:12048', // Images ou PDF, taille max de 12MB
                 'vehicule_id' => 'nullable|exists:vehicules,id',
                 'type_docauto_id' => 'required|exists:type_docautos,id',
             ], [
-                'images.max' => 'Vous pouvez télécharger jusqu\'à 4 images.',
-                'images.*.image' => 'Chaque fichier doit être une image valide.',
-                'images.*.max' => 'La taille maximale pour chaque image est de 12 MB.',
+                'images.max' => 'Vous pouvez télécharger jusqu\'à 4 fichiers.',
+                'images.*.mimes' => 'Chaque fichier doit être une image valide ou un document PDF.',
+                'images.*.max' => 'La taille maximale pour chaque fichier est de 12 MB.',
                 'vehicule_id.exists' => 'Le véhicule sélectionné est invalide.',
                 'type_docauto_id.exists' => 'Le type de pièce sélectionné est invalide.',
             ]);
@@ -299,7 +299,7 @@ class AutodocController extends Controller
             }
 
             if ($request->hasFile('images')) {
-                // Supprimer les anciennes images
+                // Supprimer les anciens fichiers
                 if ($autodoc->images) {
                     foreach ((array) $autodoc->images as $photo) {
                         if (!empty($photo)) {
@@ -308,7 +308,7 @@ class AutodocController extends Controller
                     }
                 }
 
-                // Sauvegarder les nouvelles images
+                // Sauvegarder les nouveaux fichiers
                 $imagesPaths = [];
                 foreach ($request->file('images') as $photo) {
                     $imagesPaths[] = $this->wasabiService->uploadFile(

@@ -21,4 +21,14 @@ class Categorie_service extends Model
     {
         return $this->belongsTo(Sous_categorie_service::class, 'sous_categorie_service_id');
     }
+
+    public function sousCategorieServices()
+    {
+        return $this->belongsToMany(
+            Sous_categorie_service::class,
+            'categorie_service_sous_categorie_service',
+            'categorie_service_id',
+            'sous_categorie_service_id'
+        )->withTimestamps();
+    }
 }

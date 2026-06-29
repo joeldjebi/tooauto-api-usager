@@ -78,7 +78,11 @@ class PlanController extends Controller
 
 		$abonnement = AbonnementUsager::where('user_id', $user->id)
 			->where('statut', 1)
-			->with(['forfait.categorieServices.sousCategorieService.ssCategorieService'])
+			->with([
+				'forfait.categorieServices.sousCategorieServices.ssCategorieServices',
+				'forfait.categorieServices.sousCategorieServices.ssCategorieService',
+				'forfait.categorieServices.sousCategorieService.ssCategorieService',
+			])
 			->latest()
 			->first();
 
@@ -89,7 +93,11 @@ class PlanController extends Controller
 			return (int) $id;
 		})->toArray() : [];
 
-		$categorieServices = Categorie_service::with('sousCategorieService.ssCategorieService')
+		$categorieServices = Categorie_service::with([
+				'sousCategorieServices.ssCategorieServices',
+				'sousCategorieServices.ssCategorieService',
+				'sousCategorieService.ssCategorieService',
+			])
 			->where('statut', 1)
 			->orderBy('id')
 			->get()
@@ -105,13 +113,12 @@ class PlanController extends Controller
 			})
 			->when($request->filled('sous_categorie_service_id'), function ($categories) use ($request) {
 				return $categories->filter(function ($categorie) use ($request) {
-					return (int) $categorie->sous_categorie_service_id === (int) $request->sous_categorie_service_id;
+					return $this->categorieHasSousCategorie($categorie, (int) $request->sous_categorie_service_id);
 				});
 			})
 			->when($request->filled('ss_categorie_service_id'), function ($categories) use ($request) {
 				return $categories->filter(function ($categorie) use ($request) {
-					return $categorie->sousCategorieService
-						&& (int) $categorie->sousCategorieService->ss_categorie_service_id === (int) $request->ss_categorie_service_id;
+					return $this->categorieHasSsCategorie($categorie, (int) $request->ss_categorie_service_id);
 				});
 			})
 			->values()
@@ -176,6 +183,8 @@ class PlanController extends Controller
 
 	private function formatCategorieService($categorie, $visible = true, $accessible = true, $categorieDansForfait = false)
 	{
+		$sousCategorieServices = $this->getCategorieSousCategories($categorie);
+
 		$data = [
 			'id' => $categorie->id,
 			'libelle' => $categorie->libelle,
@@ -192,9 +201,13 @@ class PlanController extends Controller
 			'dans_mon_forfait' => (bool) $categorieDansForfait,
 		];
 
-		if ($categorie->sousCategorieService) {
-			$data['sous_categorie_service'] = $this->formatSousCategorieService($categorie->sousCategorieService);
-		}
+		$data['sous_categorie_services'] = $sousCategorieServices
+			->map(function ($sousCategorie) {
+				return $this->formatSousCategorieService($sousCategorie);
+			})
+			->values();
+
+		$data['sous_categorie_service'] = $data['sous_categorie_services']->first();
 
 		return $data;
 	}
@@ -204,6 +217,8 @@ class PlanController extends Controller
 		if (!$sousCategorie) {
 			return null;
 		}
+
+		$ssCategorieServices = $this->getSousCategorieSsCategories($sousCategorie);
 
 		$data = [
 			'id' => $sousCategorie->id,
@@ -215,11 +230,60 @@ class PlanController extends Controller
 			'ss_categorie_service_id' => $sousCategorie->ss_categorie_service_id ?? null,
 		];
 
-		if ($sousCategorie->ssCategorieService) {
-			$data['ss_categorie_service'] = $this->formatSsCategorieService($sousCategorie->ssCategorieService);
-		}
+		$data['ss_categorie_services'] = $ssCategorieServices
+			->map(function ($ssCategorie) {
+				return $this->formatSsCategorieService($ssCategorie);
+			})
+			->values();
+
+		$data['ss_categorie_service'] = $data['ss_categorie_services']->first();
 
 		return $data;
+	}
+
+	private function getCategorieSousCategories($categorie)
+	{
+		$sousCategories = $categorie->relationLoaded('sousCategorieServices')
+			? $categorie->sousCategorieServices
+			: collect();
+
+		if ($sousCategories->isEmpty() && $categorie->sousCategorieService) {
+			$sousCategories = collect([$categorie->sousCategorieService]);
+		}
+
+		return $sousCategories->filter()->values();
+	}
+
+	private function getSousCategorieSsCategories($sousCategorie)
+	{
+		$ssCategories = $sousCategorie->relationLoaded('ssCategorieServices')
+			? $sousCategorie->ssCategorieServices
+			: collect();
+
+		if ($ssCategories->isEmpty() && $sousCategorie->ssCategorieService) {
+			$ssCategories = collect([$sousCategorie->ssCategorieService]);
+		}
+
+		return $ssCategories->filter()->values();
+	}
+
+	private function categorieHasSousCategorie($categorie, $sousCategorieId)
+	{
+		return $this->getCategorieSousCategories($categorie)
+			->contains(function ($sousCategorie) use ($sousCategorieId) {
+				return (int) $sousCategorie->id === $sousCategorieId;
+			});
+	}
+
+	private function categorieHasSsCategorie($categorie, $ssCategorieId)
+	{
+		return $this->getCategorieSousCategories($categorie)
+			->contains(function ($sousCategorie) use ($ssCategorieId) {
+				return $this->getSousCategorieSsCategories($sousCategorie)
+					->contains(function ($ssCategorie) use ($ssCategorieId) {
+						return (int) $ssCategorie->id === $ssCategorieId;
+					});
+			});
 	}
 
 	private function formatSsCategorieService($ssCategorie)

@@ -180,6 +180,32 @@ class EtablissementController extends Controller
         return 'etablissement/' . trim($type, '/') . '/' . ltrim($path, '/');
     }
 
+    private function attachStationServiceMediaUrls($stationService)
+    {
+        if (!$stationService || empty($stationService->logo)) {
+            return $stationService;
+        }
+
+        $stationService->logo = $this->wasabiService->temporaryUrl(
+            $this->normalizeStationServiceLogoPath($stationService->logo)
+        );
+
+        return $stationService;
+    }
+
+    private function normalizeStationServiceLogoPath($path)
+    {
+        if (empty($path) || filter_var($path, FILTER_VALIDATE_URL)) {
+            return $path;
+        }
+
+        if (Str::contains($path, '/')) {
+            return ltrim($path, '/');
+        }
+
+        return 'station_services/logo/' . ltrim($path, '/');
+    }
+
     /**
      * Récupérer les libellés des types de prestations
      */
@@ -644,6 +670,12 @@ class EtablissementController extends Controller
 
         $etablissement = $this->attachEtablissementMediaUrls($etablissement);
 
+        if ($etablissement->relationLoaded('articles')) {
+            $etablissement->setRelation('articles', $etablissement->articles->map(function ($article) {
+                return $this->attachArticleMediaUrls($article);
+            }));
+        }
+
         // Retourner les détails de l'établissement
         return response()->json([
             'success' => true,
@@ -687,7 +719,9 @@ class EtablissementController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Liste des articles de l\'établissement.',
-            'articles' => $articles,
+            'articles' => $articles->map(function ($article) {
+                return $this->attachArticleMediaUrls($article);
+            }),
         ], 200);
     }
 
@@ -1073,10 +1107,14 @@ class EtablissementController extends Controller
             ")
 		)
 		->where('statut', 1)
-		->where('borne_electrique', 0)
+		->where('station_electrique', 0)
         ->with('ville', 'commune')
 		->orderBy('distance', 'asc') // Trier par distance croissante
 		->get();
+
+		$station_service->transform(function ($station) {
+			return $this->attachStationServiceMediaUrls($station);
+		});
 
 		// Vérifier si des commissariats existent
 		if ($station_service->isEmpty()) {
@@ -1090,6 +1128,31 @@ class EtablissementController extends Controller
 		return response()->json([
 			'success' => true,
 			'message' => "Liste des stations services triée par proximité.",
+			'station_services' => $station_service,
+		], 200);
+	}
+
+    public function getAllStationServiceNormalList(Request $request)
+	{
+		$station_service = Station_service::with('ville', 'commune')
+			->where('station_electrique', 0)
+			->orderBy('id', 'desc')
+			->get();
+
+		$station_service->transform(function ($station) {
+			return $this->attachStationServiceMediaUrls($station);
+		});
+
+		if ($station_service->isEmpty()) {
+			return response()->json([
+				'success' => false,
+				'message' => "Aucun station service trouvé.",
+			], 404);
+		}
+
+		return response()->json([
+			'success' => true,
+			'message' => "Liste des stations services.",
 			'station_services' => $station_service,
 		], 200);
 	}
@@ -1135,10 +1198,14 @@ class EtablissementController extends Controller
             ")
 		)
 		->where('statut', 1)
-		->where('borne_electrique', 1)
+		->where('station_electrique', 1)
         ->with('ville', 'commune')
 		->orderBy('distance', 'asc') // Trier par distance croissante
 		->get();
+
+		$station_service->transform(function ($station) {
+			return $this->attachStationServiceMediaUrls($station);
+		});
 
 		// Vérifier si des commissariats existent
 		if ($station_service->isEmpty()) {
@@ -1152,6 +1219,57 @@ class EtablissementController extends Controller
 		return response()->json([
 			'success' => true,
 			'message' => "Liste des stations services triée par proximité.",
+			'station_services' => $station_service,
+		], 200);
+	}
+
+    public function getAllStationServiceElectriqueList(Request $request)
+	{
+		$station_service = Station_service::with('ville', 'commune')
+			->where('station_electrique', 1)
+			->orderBy('id', 'desc')
+			->get();
+
+		$station_service->transform(function ($station) {
+			return $this->attachStationServiceMediaUrls($station);
+		});
+
+		if ($station_service->isEmpty()) {
+			return response()->json([
+				'success' => false,
+				'message' => "Aucun station service trouvé.",
+			], 404);
+		}
+
+		return response()->json([
+			'success' => true,
+			'message' => "Liste des stations services.",
+			'station_services' => $station_service,
+		], 200);
+	}
+
+    public function getAllStationServiceElectriqueWithoutPayload(Request $request)
+	{
+		$station_service = Station_service::with('ville', 'commune')
+			->where('statut', 1)
+			->where('station_electrique', 1)
+			->orderBy('id', 'desc')
+			->get();
+
+		$station_service->transform(function ($station) {
+			return $this->attachStationServiceMediaUrls($station);
+		});
+
+		if ($station_service->isEmpty()) {
+			return response()->json([
+				'success' => false,
+				'message' => "Aucun station service trouvé.",
+			], 404);
+		}
+
+		return response()->json([
+			'success' => true,
+			'message' => "Liste des stations services électriques.",
 			'station_services' => $station_service,
 		], 200);
 	}
@@ -1179,7 +1297,8 @@ class EtablissementController extends Controller
 		$longitude = $request->longitude;
 
 		// Requête pour récupérer les commissariats triés par distance
-		$sapeur_pompier = Sapeur_pompier::select(
+		$sapeur_pompier = Sapeur_pompier::with(['ville', 'commune'])
+		->select(
 			'*', // Remplace '*' par les champs spécifiques si nécessaire
 			DB::raw("
 				CASE
@@ -1198,6 +1317,13 @@ class EtablissementController extends Controller
 		)
 		->orderBy('distance', 'asc')
 		->get();
+
+		$sapeur_pompier->transform(function ($item) {
+			$item->ville_libelle = $item->ville ? ($item->ville->libelle ?? $item->ville->nom) : null;
+			$item->commune_nom = $item->commune ? ($item->commune->nom ?? $item->commune->libelle) : null;
+
+			return $item;
+		});
 
 
 		// Vérifier si des commissariats existent
@@ -1453,7 +1579,7 @@ class EtablissementController extends Controller
 		$share->latitude = $request->latitude;
 		$share->usager_id = $request->usager_id;
 		$share->etablissement_id = $request->etablissement_id;
-		
+
 		$share->save();
 
         return response()->json($share, 201);

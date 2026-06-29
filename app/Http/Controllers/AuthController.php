@@ -49,6 +49,46 @@ class AuthController extends Controller
         ]]);
     }
 
+    /**
+     * Mettre à jour le token FCM de l'utilisateur mobile.
+     */
+    public function updateFcmToken(Request $request)
+    {
+        $validator = Validator::make($request->all(), [
+            'fcm_token' => 'required|string|max:4096',
+        ]);
+
+        if ($validator->fails()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Données invalides',
+                'errors' => $validator->errors(),
+            ], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        $user = $request->user();
+
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Utilisateur non authentifié',
+            ], Response::HTTP_UNAUTHORIZED);
+        }
+
+        $user->update([
+            'fcm_token' => $request->fcm_token,
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Token FCM mis à jour avec succès',
+            'data' => [
+                'user_id' => $user->id,
+                'fcm_token' => $user->fcm_token,
+            ],
+        ]);
+    }
+
     public function checkEmailExists(Request $request)
     {
         $validator = Validator::make($request->all(), [
@@ -94,7 +134,7 @@ class AuthController extends Controller
             'exists' => $exists,
         ], 200);
     }
-	
+
 	    public function updateFirstLogin(Request $request, $id)
     {
         $validator = Validator::make($request->all(), [

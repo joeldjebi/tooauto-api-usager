@@ -26,9 +26,17 @@ use Symfony\Component\Process\Process;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Auth;
+use App\Services\WasabiService;
 
 class AnnonceConcessionnaireController extends Controller
 {
+    protected $wasabiService;
+
+    public function __construct(WasabiService $wasabiService)
+    {
+        $this->wasabiService = $wasabiService;
+    }
+
     /**
      * Display a listing of the resource.
      */
@@ -46,13 +54,116 @@ class AnnonceConcessionnaireController extends Controller
 
         $annonces = Annonce_concessionnaire::where('statut', 1)
         ->where('user_id', $user->id)
-        ->with('marque', 'type_de_demande', 'type_de_vehicule')
+        ->with('marque', 'type_de_demande', 'type_de_vehicule', 'concessionnaire')
         ->get();
 
         return response()->json([
             'success' => true,
-            'data' => $annonces
+            'data' => $annonces->map(function ($annonce) {
+                return $this->attachAnnonceConcessionnaireImageUrls($annonce);
+            })
         ]);
+    }
+
+    protected function attachAnnonceConcessionnaireImageUrls($annonce)
+    {
+        if (!$annonce) {
+            return $annonce;
+        }
+
+        if ($annonce->relationLoaded('concessionnaire') && $annonce->concessionnaire) {
+            $this->attachConcessionnaireImageUrls($annonce->concessionnaire);
+        }
+
+        foreach (['image', 'logo', 'cover'] as $field) {
+            if (!empty($annonce->{$field})) {
+                $annonce->{$field} = $this->wasabiMediaUrl($annonce->{$field}, 'concessionnaire/' . $field);
+                $annonce->{$field . '_url'} = $annonce->{$field};
+            }
+        }
+
+        if (!empty($annonce->photos)) {
+            $photos = is_array($annonce->photos)
+                ? $annonce->photos
+                : json_decode($annonce->photos, true);
+
+            if (is_array($photos)) {
+                $photoUrls = array_values(array_filter(array_map(function ($photo) {
+                    return $this->wasabiMediaUrl($photo, 'images/vehicules');
+                }, $photos)));
+
+                $annonce->photos = $photoUrls;
+                $annonce->photo_urls = $photoUrls;
+            }
+        }
+
+        return $annonce;
+    }
+
+    protected function attachConcessionnaireImageUrls($concessionnaire)
+    {
+        foreach (['logo', 'cover'] as $field) {
+            if (!empty($concessionnaire->{$field})) {
+                $concessionnaire->{$field} = $this->signedWasabiMediaUrl($concessionnaire->{$field}, 'concessionnaire/' . $field);
+                $concessionnaire->{$field . '_url'} = $concessionnaire->{$field};
+            }
+        }
+
+        return $concessionnaire;
+    }
+
+    protected function signedWasabiMediaUrl(?string $media, string $defaultDirectory): ?string
+    {
+        if (empty($media)) {
+            return null;
+        }
+
+        $path = filter_var($media, FILTER_VALIDATE_URL)
+            ? $media
+            : $this->normalizeWasabiMediaPath($media, $defaultDirectory);
+
+        try {
+            return $this->wasabiService->temporaryUrl($path);
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    protected function wasabiMediaUrl(?string $media, string $defaultDirectory): ?string
+    {
+        if (empty($media)) {
+            return null;
+        }
+
+        if (filter_var($media, FILTER_VALIDATE_URL)) {
+            return $media;
+        }
+
+        $path = $this->normalizeWasabiMediaPath($media, $defaultDirectory);
+
+        try {
+            return $this->wasabiService->temporaryUrl($path) ?? $this->wasabiPublicUrl($path);
+        } catch (\Throwable $e) {
+            if (Str::contains($media, '/')) {
+                return $this->wasabiPublicUrl($path);
+            }
+
+            return asset($defaultDirectory . '/' . ltrim($media, '/'));
+        }
+    }
+
+    protected function normalizeWasabiMediaPath(string $media, string $defaultDirectory): string
+    {
+        if (Str::contains($media, '/')) {
+            return ltrim($media, '/');
+        }
+
+        return trim($defaultDirectory, '/') . '/' . ltrim($media, '/');
+    }
+
+    protected function wasabiPublicUrl(string $path): string
+    {
+        return rtrim((string) config('wasabi.url'), '/') . '/' . ltrim($path, '/');
     }
 
     /**

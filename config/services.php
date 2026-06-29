@@ -39,4 +39,12 @@ return [
         'timeout' => env('MTARGET_TIMEOUT', 30),
         'verify_ssl' => env('MTARGET_VERIFY_SSL', false),
     ],
+
+    'fineopay' => [
+        'base_url' => env('FINEOPAY_BASE_URL', 'https://dev.fineopay.com/api/v1/business/dev'),
+        'checkout_path' => env('FINEOPAY_CHECKOUT_PATH', '/checkout-link'),
+        'business_code' => env('FINEOPAY_BUSINESS_CODE'),
+        'api_key' => env('FINEOPAY_API_KEY'),
+        'callback_token' => env('FINEOPAY_CALLBACK_TOKEN'),
+    ],
 ];

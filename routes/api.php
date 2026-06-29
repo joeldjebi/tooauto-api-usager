@@ -51,6 +51,9 @@ Route::prefix('v1')->group(function () {
     Route::get('cron/notification-logs', [NotificationController::class, 'getNotificationLogs'])
         ->middleware('api.key');
 
+    // Callback public FineoPay
+    Route::post('fineopay/callback', [PaiementController::class, 'fineoPayCallback']);
+
     // Routes protégées par le middleware d'authentification
     Route::middleware('auth.multiple')->group(function () {
         // Route de déconnexion
@@ -279,9 +282,12 @@ Route::prefix('v1')->group(function () {
 
         // Route pour afficher les stations service normal
         Route::post('/get-station-service-normal', [EtablissementController::class, 'getAllStationServiceNormal']);
+        Route::get('/get-station-service-normal-list', [EtablissementController::class, 'getAllStationServiceNormalList']);
 
         // Route pour afficher les stations service electrique
         Route::post('/get-station-service-electrique', [EtablissementController::class, 'getAllStationServiceElectrique']);
+        Route::get('/get-station-service-electrique-list', [EtablissementController::class, 'getAllStationServiceElectriqueList']);
+        Route::get('/get-station-service-electrique-without-payload', [EtablissementController::class, 'getAllStationServiceElectriqueWithoutPayload']);
 
         // Route pour afficher les alert
         Route::post('/get-alert-by-type', [AlertController::class, 'getAlertByType']);
@@ -345,6 +351,7 @@ Route::prefix('v1')->group(function () {
 		Route::get('/categories-services-abonnement', [PlanController::class, 'apiCategoriesServicesByAbonnement']);
 		Route::post('/store-paiement', [PaiementController::class, 'storePaiement']);
 		Route::post('/store-paiement-free', [PaiementController::class, 'storeAbonnementGratuit']);
+		Route::post('/paiement/check-statut', [PaiementController::class, 'checkStatutPaiement']);
 
 		// Route pour afficher la page de vérification
 		Route::post('/paiement/verifier-statut', [PaiementController::class, 'verifierStatutPaiementApi']);

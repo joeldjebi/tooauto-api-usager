@@ -77,30 +77,30 @@ class VehiculeController extends Controller
         ], 200);
     }
 
-	
+
     /**
      * Display a listing of the resource.
      */
     public function indexTypeDeVehicule()
     {
         $user = auth()->user();
-        
+
         if (empty($user)) {
             return response()->json([
                 'success' => false,
                 'message' => 'Utilisateur introuvable',
             ], 404);
         }
-    
+
         $type_de_vehicule = Type_de_vehicule::orderBy('id', 'desc')->get();
-    
+
         if ($type_de_vehicule->isEmpty()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Aucun type de vehicule enregistré pour le moment.',
             ], 404);
         }
-    
+
         return response()->json([
             'success' => true,
             'message' => 'Liste des types de vehicules.',
@@ -114,23 +114,23 @@ class VehiculeController extends Controller
     public function indexTypeDeCarburant()
     {
         $user = auth()->user();
-        
+
         if (empty($user)) {
             return response()->json([
                 'success' => false,
                 'message' => 'Utilisateur introuvable',
             ], 404);
         }
-    
+
         $type_de_carburant = Type_de_carburant::orderBy('id', 'desc')->get();
-    
+
         if ($type_de_carburant->isEmpty()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Aucun type de carburant enregistré pour le moment.',
             ], 404);
         }
-    
+
         return response()->json([
             'success' => true,
             'message' => 'Liste des types de carburant.',
@@ -144,23 +144,23 @@ class VehiculeController extends Controller
     public function indexMarque()
     {
         $user = auth()->user();
-        
+
         if (empty($user)) {
             return response()->json([
                 'success' => false,
                 'message' => 'Utilisateur introuvable',
             ], 404);
         }
-    
+
         $marques = Marque::orderBy('id', 'desc')->get();
-    
+
         if ($marques->isEmpty()) {
             return response()->json([
                 'success' => false,
                 'message' => 'Aucune marque enregistré pour le moment.',
             ], 404);
         }
-    
+
         return response()->json([
             'success' => true,
             'message' => 'Liste des marque.',
@@ -187,7 +187,7 @@ class VehiculeController extends Controller
             'couleur' => 'required|string|max:50',
             'modele' => 'required',
         ]);
-    
+
         if ($validator->fails()) {
             return response()->json([
                 'success' => false,
@@ -213,7 +213,7 @@ class VehiculeController extends Controller
                 'quota' => $quotaCheck['quota'],
             ], $quotaCheck['status']);
         }
-    
+
         DB::beginTransaction();
         try {
             // Création du véhicule
@@ -226,17 +226,17 @@ class VehiculeController extends Controller
             $vehicule->couleur = $request->couleur;
             $vehicule->modele = $request->modele;
             $vehicule->user_id = $user->id;
-            
+
             if(!empty($user->gestionnaire_de_flotte_id)){
                 $vehicule->provenance = 'flotte';
                 $vehicule->provenance_by = NULL;
                 $vehicule->gestionnaire_de_flotte_id = $user->gestionnaire_de_flotte_id;
             }
-    
+
             // Sauvegarde des photos
             if ($request->hasFile('photos')) {
                 $photosPaths = [];
-            
+
                 foreach ($request->file('photos') as $photo) {
                     $photosPaths[] = $this->wasabiService->uploadFile(
                         $photo,
@@ -244,24 +244,24 @@ class VehiculeController extends Controller
                         'vehicule'
                     );
                 }
-            
+
                 // Liaison des chemins des photos avec le véhicule (stocké en JSON)
                 $vehicule->photos = json_encode($photosPaths);
             }
-            
+
             $vehicule->save();
-    
+
             DB::commit();
-    
+
             return response()->json([
                 'success' => true,
                 'message' => 'Véhicule enregistré avec succès.',
                 'vehicule' => $this->attachVehiculePhotoUrls($vehicule),
             ], 201);
-    
+
         } catch (\Exception $e) {
             DB::rollBack();
-    
+
             return response()->json([
                 'success' => false,
                 'message' => "Une erreur est survenue lors de l'enregistrement du véhicule.",
@@ -269,19 +269,19 @@ class VehiculeController extends Controller
             ], 500);
         }
     }
-    
+
 
     public function updateVehicule(Request $request, $id)
     {
         $vehicule = Vehicule::find($id);
-    
+
         if (!$vehicule) {
             return response()->json([
                 'success' => false,
                 'message' => 'Véhicule introuvable.',
             ], 404);
         }
-        
+
         // Validation des données d'entrée
         $validator = Validator::make($request->all(), [
             'matricule' => 'sometimes|string|unique:vehicules,matricule,' . $id,
@@ -294,7 +294,7 @@ class VehiculeController extends Controller
             'couleur' => 'sometimes|string|max:50',
             'modele' => 'sometimes|string',
         ]);
-    
+
         if ($validator->fails()) {
             return response()->json([
                 'success' => false,
@@ -302,7 +302,7 @@ class VehiculeController extends Controller
                 'errors' => $validator->errors(),
             ], 422);
         }
-    
+
         $user = auth()->user();
         if (empty($user)) {
             return response()->json([
@@ -344,8 +344,8 @@ class VehiculeController extends Controller
             if ($request->has('type_de_carburant_id')) $vehicule->type_de_carburant_id = $request->type_de_carburant_id;
             if ($request->has('couleur')) $vehicule->couleur = $request->couleur;
 			if ($request->has('modele')) $vehicule->modele = $request->modele;
-            
-    
+
+
             // Mise à jour des photos
             if ($request->hasFile('photos')) {
                 // Supprimer les anciennes photos
@@ -356,7 +356,7 @@ class VehiculeController extends Controller
                         }
                     }
                 }
-            
+
                 // Sauvegarder les nouvelles photos
                 $photosPaths = [];
                 foreach ($request->file('photos') as $photo) {
@@ -366,25 +366,25 @@ class VehiculeController extends Controller
                         'vehicule'
                     );
                 }
-            
+
                 // Sauvegarder les chemins dans la base de données
                 $vehicule->photos = json_encode($photosPaths);
             }
-            
-    
+
+
             $vehicule->save();
-    
+
             DB::commit();
-    
+
             return response()->json([
                 'success' => true,
                 'message' => 'Véhicule mis à jour avec succès.',
                 'vehicule' => $this->attachVehiculePhotoUrls($vehicule),
             ], 200);
-    
+
         } catch (\Exception $e) {
             DB::rollBack();
-    
+
             return response()->json([
                 'success' => false,
                 'message' => "Une erreur est survenue lors de la mise à jour du véhicule.",
@@ -417,7 +417,7 @@ class VehiculeController extends Controller
 
         return $vehicule;
     }
-    
+
 
     /**
      * Remove the specified resource from storage.
@@ -428,7 +428,7 @@ class VehiculeController extends Controller
         $validator = Validator::make($request->all(), [
             'vehicule_id' => 'required|exists:vehicules,id',
         ]);
-    
+
         if ($validator->fails()) {
             return response()->json([
                 'success' => false,
@@ -436,9 +436,9 @@ class VehiculeController extends Controller
                 'errors' => $validator->errors(),
             ], 422);
         }
-    
+
         $id = $request->vehicule_id;
-    
+
         // Récupérer le véhicule
         $vehicule = Vehicule::find($id);
         if (!$vehicule) {
@@ -478,20 +478,19 @@ class VehiculeController extends Controller
                 'data' => $deleteCheck['data'],
             ], $deleteCheck['status']);
         }
-    
+
         DB::beginTransaction();
         try {
             // Supprimer les photos associées
-            if ($vehicule->photos) {
-                foreach ((array) $vehicule->photos as $photo) {
-                    if (!empty($photo)) {
-                        $this->wasabiService->deleteFile($photo);
-                    }
-                }
-            }
-    
-            // Supprimer les alertes liées (si nécessaire)
-            Alert::where('id', $id)->delete();
+            $this->deleteWasabiFiles($vehicule->photos);
+
+            $this->deleteVehicleLinkedRows($vehicule->id, [
+                'declarations',
+                'alerts',
+                'autodocs',
+                'avis_usager_declarations',
+                'entretiens',
+            ]);
 
             VehiculeDeletion::create([
                 'user_id' => $user->id,
@@ -499,26 +498,138 @@ class VehiculeController extends Controller
                 'matricule' => $vehicule->matricule,
                 'deleted_at' => now(),
             ]);
-    
+
             // Supprimer le véhicule
             $vehicule->delete();
-    
+
             DB::commit();
-    
+
             return response()->json([
                 'success' => true,
                 'message' => 'Véhicule supprimé avec succès.',
             ], 200);
-    
+
         } catch (\Exception $e) {
             DB::rollBack();
-    
+
             return response()->json([
                 'success' => false,
                 'message' => "Une erreur est survenue lors de la suppression du véhicule.",
                 'dev' => $e->getMessage(),
             ], 500);
         }
+    }
+
+    private function deleteVehicleLinkedRows(int $vehiculeId, array $tables): void
+    {
+        $schema = DB::getSchemaBuilder();
+
+        foreach ($tables as $table) {
+            if (!$schema->hasTable($table) || !$schema->hasColumn($table, 'vehicule_id')) {
+                continue;
+            }
+
+            $rows = DB::table($table)
+                ->where('vehicule_id', $vehiculeId)
+                ->get();
+
+            foreach ($rows as $row) {
+                $this->deleteRowWasabiFiles((array) $row);
+            }
+
+            DB::table($table)
+                ->where('vehicule_id', $vehiculeId)
+                ->delete();
+        }
+    }
+
+    private function deleteRowWasabiFiles(array $row): void
+    {
+        foreach ($this->wasabiFileColumns() as $column) {
+            if (!array_key_exists($column, $row)) {
+                continue;
+            }
+
+            $this->deleteWasabiFiles($row[$column]);
+        }
+    }
+
+    private function deleteWasabiFiles($value): void
+    {
+        foreach ($this->normalizeWasabiFileValues($value) as $file) {
+            try {
+                $this->wasabiService->deleteFile($file);
+            } catch (\Throwable $e) {
+                \Log::error('Erreur suppression fichier Wasabi lors de la suppression du véhicule', [
+                    'file' => $file,
+                    'message' => $e->getMessage(),
+                ]);
+            }
+        }
+    }
+
+    private function normalizeWasabiFileValues($value): array
+    {
+        if (empty($value)) {
+            return [];
+        }
+
+        if (is_array($value)) {
+            return collect($value)
+                ->flatMap(function ($item) {
+                    return $this->normalizeWasabiFileValues($item);
+                })
+                ->filter()
+                ->values()
+                ->all();
+        }
+
+        if (!is_string($value)) {
+            return [];
+        }
+
+        $value = trim($value);
+
+        if ($value === '') {
+            return [];
+        }
+
+        $decoded = json_decode($value, true);
+
+        if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+            return $this->normalizeWasabiFileValues($decoded);
+        }
+
+        return [$value];
+    }
+
+    private function wasabiFileColumns(): array
+    {
+        return [
+            'images',
+            'photos',
+            'photo',
+            'image',
+            'fichier',
+            'fichiers',
+            'file',
+            'files',
+            'document',
+            'documents',
+            'piece',
+            'pieces',
+            'piece_recto',
+            'piece_verso',
+            'recto',
+            'verso',
+            'justificatif',
+            'justificatifs',
+            'facture',
+            'factures',
+            'pdf',
+            'path',
+            'url',
+        ];
     }
 
     private function checkVehicleQuota($user)
@@ -653,7 +764,7 @@ class VehiculeController extends Controller
     {
         return $vehicule->created_at && $vehicule->created_at->lt(now()->subHours(48));
     }
-    
+
 	/**
      * Display a listing of the resource.
      */
@@ -672,7 +783,7 @@ class VehiculeController extends Controller
         $vehicules = Vehicule_concessionnaire::orderBy('id', 'desc')
 		->with('marque', 'concessionnaire')
         ->get();
-		
+
 		//dd($vehicules);
 
         // Vérifier si des établissements existent
@@ -692,8 +803,8 @@ class VehiculeController extends Controller
             }),
         ], 200);
     }
-    
-	
+
+
 	/**
      * Display a listing of the resource.
      */
@@ -707,7 +818,7 @@ class VehiculeController extends Controller
                 'message' => 'Utilisateur introuvable',
             ], 404);
         }
-		
+
 		$concessionnaire = Concessionnaire::where('id', $id)->first();
 		if (empty($concessionnaire)) {
             return response()->json([
@@ -721,7 +832,7 @@ class VehiculeController extends Controller
 		->orderBy('id', 'desc')
 		->with('marque', 'concessionnaire')
         ->get();
-		
+
 		//dd($vehicules);
 
         // Vérifier si des établissements existent
@@ -744,26 +855,49 @@ class VehiculeController extends Controller
 
     protected function attachVehiculeConcessionnairePhotoUrls($vehicule)
     {
-        if (!$vehicule || empty($vehicule->photos)) {
+        if (!$vehicule) {
             return $vehicule;
         }
 
-        $photos = is_array($vehicule->photos)
-            ? $vehicule->photos
-            : json_decode($vehicule->photos, true);
-
-        if (!is_array($photos)) {
-            return $vehicule;
+        if ($vehicule->relationLoaded('concessionnaire') && $vehicule->concessionnaire) {
+            $this->attachConcessionnaireImageUrls($vehicule->concessionnaire);
         }
 
-        $photoUrls = array_values(array_filter(array_map(function ($photo) {
-            return $this->vehiculeConcessionnairePhotoUrl($photo);
-        }, $photos)));
+        if (!empty($vehicule->photos)) {
+            $photos = is_array($vehicule->photos)
+                ? $vehicule->photos
+                : json_decode($vehicule->photos, true);
 
-        $vehicule->photos = $photoUrls;
-        $vehicule->photo_urls = $photoUrls;
+            if (is_array($photos)) {
+                $photoUrls = array_values(array_filter(array_map(function ($photo) {
+                    return $this->vehiculeConcessionnairePhotoUrl($photo);
+                }, $photos)));
+
+                $vehicule->photos = $photoUrls;
+                $vehicule->photo_urls = $photoUrls;
+            }
+        }
+
+        foreach (['photo', 'image'] as $field) {
+            if (!empty($vehicule->{$field})) {
+                $vehicule->{$field} = $this->vehiculeConcessionnairePhotoUrl($vehicule->{$field});
+                $vehicule->{$field . '_url'} = $vehicule->{$field};
+            }
+        }
 
         return $vehicule;
+    }
+
+    protected function attachConcessionnaireImageUrls($concessionnaire)
+    {
+        foreach (['logo', 'cover'] as $field) {
+            if (!empty($concessionnaire->{$field})) {
+                $concessionnaire->{$field} = $this->concessionnaireImageUrl($concessionnaire->{$field}, $field);
+                $concessionnaire->{$field . '_url'} = $concessionnaire->{$field};
+            }
+        }
+
+        return $concessionnaire;
     }
 
     protected function vehiculeConcessionnairePhotoUrl(?string $photo): ?string
@@ -796,6 +930,38 @@ class VehiculeController extends Controller
         }
 
         return 'images/vehicules/' . ltrim($photo, '/');
+    }
+
+    protected function concessionnaireImageUrl(?string $image, string $type): ?string
+    {
+        if (empty($image)) {
+            return null;
+        }
+
+        if (filter_var($image, FILTER_VALIDATE_URL)) {
+            return $image;
+        }
+
+        $path = $this->normalizeConcessionnaireImagePath($image, $type);
+
+        try {
+            return $this->wasabiService->temporaryUrl($path) ?? $this->wasabiPublicUrl($path);
+        } catch (\Throwable $e) {
+            if (Str::contains($image, '/')) {
+                return $this->wasabiPublicUrl($path);
+            }
+
+            return asset('concessionnaire/' . $type . '/' . ltrim($image, '/'));
+        }
+    }
+
+    protected function normalizeConcessionnaireImagePath(string $image, string $type): string
+    {
+        if (Str::contains($image, '/')) {
+            return ltrim($image, '/');
+        }
+
+        return 'concessionnaire/' . $type . '/' . ltrim($image, '/');
     }
 
     protected function wasabiPublicUrl(string $path): string

@@ -29,17 +29,25 @@ use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
+use App\Services\FineoPayService;
 
 class PaiementController extends Controller
 {
+    protected FineoPayService $fineoPayService;
+
+    public function __construct(FineoPayService $fineoPayService)
+    {
+        $this->fineoPayService = $fineoPayService;
+    }
+
     /**
      * Display a listing of the resource.
      */
 	public function storePaiement(Request $request)
 	{
 		$request->validate([
-			'referenceNumber' => 'required|string|unique:paiements',
-			'amount' => 'required|string',
+			'referenceNumber' => 'nullable|string|unique:paiements,referenceNumber',
+			'amount' => 'required|numeric',
 			'description' => 'nullable|string',
 			'countryCurrencyCode' => 'nullable|string',
 			'customerEmail' => 'nullable|email',
@@ -51,8 +59,10 @@ class PaiementController extends Controller
 		]);
 
 		try {
+			$referenceNumber = $request->referenceNumber ?: 'TOO-' . now()->format('YmdHis') . '-' . Str::upper(Str::random(6));
+
 			$paiement = Paiement::create([
-				'referenceNumber' => $request->referenceNumber,
+				'referenceNumber' => $referenceNumber,
 				'amount' => $request->amount,
 				'description' => $request->description,
 				'countryCurrencyCode' => $request->countryCurrencyCode,
@@ -65,16 +75,111 @@ class PaiementController extends Controller
 				'statut' => 'en_attente'
 			]);
 
+			$checkoutPayload = [
+				'title' => $request->description ?: 'Paiement abonnement TOO AUTO',
+				'amount' => (int) $request->amount,
+				'callbackUrl' => $this->fineoPayService->callbackUrl(),
+				'syncRef' => $referenceNumber,
+				'inputs' => [],
+			];
+
+			$fineoPayRequest = [
+				'url' => $this->fineoPayService->checkoutUrl(),
+				'headers' => [
+					'Content-Type' => 'application/json',
+					'businessCode' => config('services.fineopay.business_code'),
+					'apiKey' => config('services.fineopay.api_key') ? '***' : null,
+				],
+				'payload' => $checkoutPayload,
+			];
+
+			$fineoPayResponse = $this->fineoPayService->createCheckoutLink($checkoutPayload);
+			$fineoPayBody = data_get($fineoPayResponse, 'body');
+			$fineoPayHttpStatus = data_get($fineoPayResponse, 'http_status', 500);
+			$checkoutLink = data_get($fineoPayBody, 'data.checkoutLink');
+
+			if (!$checkoutLink) {
+				$paiement->forceFill([
+					'statut' => 'failed',
+					'reponse_api' => [
+						'provider' => 'fineopay',
+						'request' => $fineoPayRequest,
+						'response' => $fineoPayResponse,
+					],
+				])->save();
+
+				return response()->json([
+					'status' => 'error',
+					'message' => 'FineoPay n’a pas retourné de lien de paiement.',
+					'fineopay_request' => $fineoPayRequest,
+					'fineopay' => $fineoPayBody,
+					'http_status' => $fineoPayHttpStatus,
+				], $fineoPayHttpStatus >= 400 && $fineoPayHttpStatus < 600 ? $fineoPayHttpStatus : 502);
+			}
+
+			$paiement->forceFill([
+				'checkout_link' => $checkoutLink,
+				'reponse_api' => [
+					'provider' => 'fineopay',
+					'request' => $fineoPayRequest,
+					'checkout' => $fineoPayResponse,
+				],
+			])->save();
+
 			return response()->json([
 				'status' => 'success',
-				'message' => 'Paiement enregistré avec succès',
-				'data' => $paiement
+				'message' => 'Lien de paiement généré avec succès',
+				'data' => [
+					'paiement' => $paiement,
+					'checkoutLink' => $checkoutLink,
+					'syncRef' => $referenceNumber,
+					'fineopay_request' => $fineoPayRequest,
+				],
 			], 201);
 
-		} catch (\Exception $e) {
+		} catch (\Illuminate\Http\Client\RequestException $e) {
+			$fineoPayPayload = $e->response ? $e->response->json() : null;
+			$httpStatus = $e->response ? $e->response->status() : 500;
+
+			if (isset($paiement)) {
+				$paiement->forceFill([
+					'statut' => 'failed',
+					'reponse_api' => [
+						'provider' => 'fineopay',
+						'request' => $fineoPayRequest ?? null,
+						'http_status' => $httpStatus,
+						'payload' => $fineoPayPayload,
+						'error' => $e->getMessage(),
+					],
+				])->save();
+			}
+
 			return response()->json([
 				'status' => 'error',
-				'message' => 'Erreur lors de l\'enregistrement du paiement',
+				'message' => 'Erreur lors de la génération du lien de paiement',
+				'fineopay_request' => $fineoPayRequest ?? null,
+				'fineopay' => $fineoPayPayload,
+				'http_status' => $httpStatus,
+				'error' => $e->getMessage(),
+			], $httpStatus >= 400 && $httpStatus < 600 ? $httpStatus : 500);
+		} catch (\Exception $e) {
+			if (isset($paiement)) {
+				$paiement->forceFill([
+					'statut' => 'failed',
+					'reponse_api' => [
+						'provider' => 'fineopay',
+						'request' => $fineoPayRequest ?? null,
+						'payload' => null,
+						'error' => $e->getMessage(),
+					],
+				])->save();
+			}
+
+			return response()->json([
+				'status' => 'error',
+				'message' => 'Erreur lors de la génération du lien de paiement',
+				'fineopay_request' => $fineoPayRequest ?? null,
+				'fineopay' => null,
 				'error' => $e->getMessage()
 			], 500);
 		}
@@ -288,6 +393,177 @@ class PaiementController extends Controller
 			], 500);
 		}
 	}
+
+	public function checkStatutPaiement(Request $request): JsonResponse
+	{
+		$validated = $request->validate([
+			'syncRef' => 'required|string',
+		]);
+
+		$paiement = Paiement::where('referenceNumber', $validated['syncRef'])->first();
+
+		if (!$paiement) {
+			return response()->json([
+				'success' => false,
+				'message' => 'Paiement introuvable.',
+			], 404);
+		}
+
+		$abonnement = null;
+		if ($paiement->statut === 'success') {
+			$abonnement = AbonnementUsager::where('user_id', $paiement->user_id)
+				->where('forfait_id', $paiement->forfait_id)
+				->whereDate('date_debut', optional($paiement->date_debut)->toDateString())
+				->latest()
+				->first();
+		}
+
+		$messages = [
+			'en_attente' => 'Paiement en attente de confirmation.',
+			'success' => 'Paiement confirmé. Abonnement activé.',
+			'failed' => 'Paiement échoué.',
+		];
+
+		return response()->json([
+			'success' => true,
+			'status' => $paiement->statut,
+			'message' => $messages[$paiement->statut] ?? 'Statut du paiement récupéré.',
+			'data' => [
+				'paiement' => $paiement,
+				'abonnement' => $abonnement,
+			],
+		]);
+	}
+
+	public function fineoPayCallback(Request $request): JsonResponse
+	{
+		$callbackToken = $request->header('X-Callback-Token')
+			?: $request->header('X-FineoPay-Token')
+			?: $request->query('token');
+
+		if (!$this->fineoPayService->isValidCallbackToken($callbackToken)) {
+			Log::warning('Callback FineoPay rejeté : token invalide.', [
+				'syncRef' => $request->input('syncRef'),
+				'ip' => $request->ip(),
+			]);
+
+			return response()->json([
+				'success' => false,
+				'message' => 'Token callback invalide.',
+			], 401);
+		}
+
+		$validated = $request->validate([
+			'syncRef' => 'required|string',
+			'reference' => 'required|string',
+			'amount' => 'required|numeric',
+			'status' => 'required|string',
+			'clientAccountNumber' => 'nullable|string',
+			'timestamp' => 'nullable|date',
+		]);
+
+		$paiement = Paiement::where('referenceNumber', $validated['syncRef'])->first();
+
+		if (!$paiement) {
+			Log::warning('Callback FineoPay reçu pour un paiement introuvable.', [
+				'syncRef' => $validated['syncRef'],
+				'reference' => $validated['reference'],
+			]);
+
+			return response()->json([
+				'success' => false,
+				'message' => 'Paiement introuvable.',
+			], 404);
+		}
+
+		if ((int) $paiement->amount !== (int) $validated['amount']) {
+			Log::warning('Callback FineoPay avec montant incorrect.', [
+				'syncRef' => $validated['syncRef'],
+				'expected_amount' => $paiement->amount,
+				'received_amount' => $validated['amount'],
+			]);
+
+			return response()->json([
+				'success' => false,
+				'message' => 'Montant de paiement incorrect.',
+			], 422);
+		}
+
+		if ($paiement->statut === 'success') {
+			return response()->json([
+				'success' => true,
+				'message' => 'Paiement déjà traité.',
+			]);
+		}
+
+		if (strtolower($validated['status']) !== 'success') {
+			$paiement->forceFill([
+				'statut' => 'failed',
+				'fineopay_reference' => $validated['reference'],
+				'reponse_api' => [
+					'provider' => 'fineopay',
+					'callback' => $validated,
+				],
+			])->save();
+
+			return response()->json([
+				'success' => true,
+				'message' => 'Callback FineoPay reçu. Paiement marqué comme échoué.',
+			]);
+		}
+
+		DB::beginTransaction();
+
+		try {
+			$forfait = Forfait_usager::findOrFail($paiement->forfait_id);
+			$dateDebut = now();
+			$dateFin = now()->addMonths((int) $forfait->duree);
+
+			$abonnement = AbonnementUsager::create([
+				'user_id' => $paiement->user_id,
+				'forfait_id' => $paiement->forfait_id,
+				'date_debut' => $dateDebut,
+				'date_fin' => $dateFin,
+				'statut' => 1,
+				'is_free' => 0,
+			]);
+
+			$paiement->forceFill([
+				'statut' => 'success',
+				'fineopay_reference' => $validated['reference'],
+				'date_debut' => $dateDebut,
+				'date_fin' => $dateFin,
+				'reponse_api' => [
+					'provider' => 'fineopay',
+					'callback' => $validated,
+				],
+			])->save();
+
+			DB::commit();
+
+			return response()->json([
+				'success' => true,
+				'message' => 'Paiement FineoPay confirmé. Abonnement activé.',
+				'data' => [
+					'paiement' => $paiement,
+					'abonnement' => $abonnement,
+				],
+			]);
+		} catch (\Throwable $e) {
+			DB::rollBack();
+
+			Log::error('Erreur lors du traitement du callback FineoPay.', [
+				'syncRef' => $validated['syncRef'],
+				'reference' => $validated['reference'],
+				'message' => $e->getMessage(),
+			]);
+
+			return response()->json([
+				'success' => false,
+				'message' => 'Erreur lors du traitement du callback FineoPay.',
+			], 500);
+		}
+	}
 	
 	public function verifierStatutPaiement($reference, $forfaitId, $userId)
 	{
@@ -303,10 +579,14 @@ class PaiementController extends Controller
 				throw new \Exception('Promoteur non trouvé');
 			}
 
-			// Vérification de l'existence du forfait
-			$forfait = Forfait::find($forfaitId);
-			if (!$forfait || $forfait->id == 1) {
+			// Vérification de l'existence du forfait usager
+			$forfait = Forfait_usager::find($forfaitId);
+			if (!$forfait) {
 				throw new \Exception('Forfait non trouvé');
+			}
+
+			if (strtolower(trim($forfait->libelle)) === 'freemium' || (int) $forfait->prix === 0) {
+				throw new \Exception('Le forfait FREEMIUM doit être activé via l’abonnement gratuit.');
 			}
 			
 			
@@ -371,14 +651,14 @@ class PaiementController extends Controller
 					$abonnement->user_id = $userId;
 					$abonnement->forfait_id = $forfaitId;
 					$abonnement->date_debut = now();
-					$abonnement->date_fin = now()->addDays($forfait->duree);
+					$abonnement->date_fin = now()->addMonths((int) $forfait->duree);
 					$abonnement->save();
 
 					// Mise à jour du paiement
 					$paiement->update([
 						'statut' => 'success',
 						'date_debut' => now(),
-						'date_fin' => now()->addDays($forfait->duree),
+						'date_fin' => now()->addMonths((int) $forfait->duree),
 						'reponse_api' => $result
 					]);
 

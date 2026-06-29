@@ -1,0 +1,342 @@
+{
+  "info": {
+    "_postman_id": "3b8996aa-6800-47e8-a37c-fineopay-tooauto",
+    "name": "TOO AUTO USAGER API - Paiement FineoPay Mobile",
+    "description": "Documentation Postman du parcours paiement FineoPay pour l'equipe mobile.\n\nLe mobile utilise uniquement 2 APIs:\n1. `POST /api/v1/store-paiement` pour initier le paiement et recuperer le `checkoutLink`.\n2. `POST /api/v1/paiement/check-statut` pour verifier le statut avec `syncRef`.\n\nLe callback FineoPay reste gere uniquement cote backend:\n`POST /api/v1/fineopay/callback?token=FINEOPAY_CALLBACK_TOKEN`\n\nParcours:\n1. Le mobile appelle `store-paiement`.\n2. Le backend cree le paiement local en `en_attente`, appelle FineoPay et retourne `checkoutLink` + `syncRef`.\n3. Le mobile ouvre `checkoutLink` pour permettre a l'utilisateur de payer.\n4. FineoPay appelle le callback backend.\n5. Le backend met a jour le paiement et active l'abonnement si le paiement est reussi.\n6. Le mobile appelle `paiement/check-statut` avec `syncRef` pour rafraichir l'etat.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "https://votre-domaine.com",
+      "type": "string"
+    },
+    {
+      "key": "api_prefix",
+      "value": "/api/v1",
+      "type": "string"
+    },
+    {
+      "key": "auth_token",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "user_id",
+      "value": "12",
+      "type": "string"
+    },
+    {
+      "key": "forfait_id",
+      "value": "2",
+      "type": "string"
+    },
+    {
+      "key": "amount",
+      "value": "5000",
+      "type": "string"
+    },
+    {
+      "key": "sync_ref",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "checkout_link",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Initier paiement FineoPay",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 201', function () {",
+              "    pm.response.to.have.status(201);",
+              "});",
+              "",
+              "const json = pm.response.json();",
+              "",
+              "pm.test('Lien de paiement retourne', function () {",
+              "    pm.expect(json.status).to.eql('success');",
+              "    pm.expect(json.data.checkoutLink).to.be.a('string').and.not.empty;",
+              "    pm.expect(json.data.syncRef).to.be.a('string').and.not.empty;",
+              "});",
+              "",
+              "if (json.data) {",
+              "    pm.collectionVariables.set('checkout_link', json.data.checkoutLink || '');",
+              "    pm.collectionVariables.set('sync_ref', json.data.syncRef || '');",
+              "}"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{auth_token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"amount\": {{amount}},\n  \"description\": \"Paiement abonnement Premium\",\n  \"countryCurrencyCode\": \"XOF\",\n  \"customerEmail\": \"client@example.com\",\n  \"customerFirstName\": \"Jean\",\n  \"customerLastname\": \"Kouadio\",\n  \"customerPhoneNumber\": \"0700000000\",\n  \"user_id\": {{user_id}},\n  \"forfait_id\": {{forfait_id}}\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}{{api_prefix}}/store-paiement",
+          "host": [
+            "{{base_url}}{{api_prefix}}"
+          ],
+          "path": [
+            "store-paiement"
+          ]
+        },
+        "description": "Appelee par le mobile pour initier le paiement.\n\nLe backend:\n- cree un paiement local `en_attente`,\n- appelle FineoPay,\n- transmet a FineoPay le callback backend avec le token,\n- retourne `checkoutLink` et `syncRef`.\n\nAction mobile apres succes: ouvrir `data.checkoutLink`."
+      },
+      "response": [
+        {
+          "name": "201 - Lien FineoPay genere",
+          "originalRequest": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 5000,\n  \"description\": \"Paiement abonnement Premium\",\n  \"countryCurrencyCode\": \"XOF\",\n  \"customerEmail\": \"client@example.com\",\n  \"customerFirstName\": \"Jean\",\n  \"customerLastname\": \"Kouadio\",\n  \"customerPhoneNumber\": \"0700000000\",\n  \"user_id\": 12,\n  \"forfait_id\": 2\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}{{api_prefix}}/store-paiement",
+              "host": [
+                "{{base_url}}{{api_prefix}}"
+              ],
+              "path": [
+                "store-paiement"
+              ]
+            }
+          },
+          "status": "Created",
+          "code": 201,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"status\": \"success\",\n  \"message\": \"Lien de paiement généré avec succès\",\n  \"data\": {\n    \"paiement\": {\n      \"id\": 1,\n      \"referenceNumber\": \"TOO-20260601123000-ABC123\",\n      \"amount\": 5000,\n      \"description\": \"Paiement abonnement Premium\",\n      \"countryCurrencyCode\": \"XOF\",\n      \"customerEmail\": \"client@example.com\",\n      \"customerFirstName\": \"Jean\",\n      \"customerLastname\": \"Kouadio\",\n      \"customerPhoneNumber\": \"0700000000\",\n      \"user_id\": 12,\n      \"forfait_id\": 2,\n      \"statut\": \"en_attente\",\n      \"checkout_link\": \"https://dev.fineopay.com/pay/business123/abc123/checkout\"\n    },\n    \"checkoutLink\": \"https://dev.fineopay.com/pay/business123/abc123/checkout\",\n    \"syncRef\": \"TOO-20260601123000-ABC123\"\n  }\n}"
+        }
+      ]
+    },
+    {
+      "name": "2. Check statut paiement",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('HTTP 200', function () {",
+              "    pm.response.to.have.status(200);",
+              "});",
+              "",
+              "const json = pm.response.json();",
+              "",
+              "pm.test('Statut present', function () {",
+              "    pm.expect(json.success).to.eql(true);",
+              "    pm.expect(json.status).to.be.oneOf(['en_attente', 'success', 'failed']);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{auth_token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "Accept",
+            "value": "application/json"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"syncRef\": \"{{sync_ref}}\"\n}"
+        },
+        "url": {
+          "raw": "{{base_url}}{{api_prefix}}/paiement/check-statut",
+          "host": [
+            "{{base_url}}{{api_prefix}}"
+          ],
+          "path": [
+            "paiement",
+            "check-statut"
+          ]
+        },
+        "description": "Appelee par le mobile apres redirection paiement, ou en polling court, pour savoir si le callback FineoPay a deja confirme le paiement.\n\nStatuts possibles:\n- `en_attente`: paiement pas encore confirme par callback.\n- `success`: paiement confirme et abonnement active.\n- `failed`: paiement echoue."
+      },
+      "response": [
+        {
+          "name": "200 - Paiement en attente",
+          "originalRequest": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"syncRef\": \"TOO-20260601123000-ABC123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}{{api_prefix}}/paiement/check-statut",
+              "host": [
+                "{{base_url}}{{api_prefix}}"
+              ],
+              "path": [
+                "paiement",
+                "check-statut"
+              ]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"success\": true,\n  \"status\": \"en_attente\",\n  \"message\": \"Paiement en attente de confirmation.\",\n  \"data\": {\n    \"paiement\": {},\n    \"abonnement\": null\n  }\n}"
+        },
+        {
+          "name": "200 - Paiement confirme",
+          "originalRequest": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"syncRef\": \"TOO-20260601123000-ABC123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}{{api_prefix}}/paiement/check-statut",
+              "host": [
+                "{{base_url}}{{api_prefix}}"
+              ],
+              "path": [
+                "paiement",
+                "check-statut"
+              ]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"success\": true,\n  \"status\": \"success\",\n  \"message\": \"Paiement confirmé. Abonnement activé.\",\n  \"data\": {\n    \"paiement\": {},\n    \"abonnement\": {}\n  }\n}"
+        },
+        {
+          "name": "200 - Paiement echoue",
+          "originalRequest": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"syncRef\": \"TOO-20260601123000-ABC123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}{{api_prefix}}/paiement/check-statut",
+              "host": [
+                "{{base_url}}{{api_prefix}}"
+              ],
+              "path": [
+                "paiement",
+                "check-statut"
+              ]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "body": "{\n  \"success\": true,\n  \"status\": \"failed\",\n  \"message\": \"Paiement échoué.\",\n  \"data\": {\n    \"paiement\": {},\n    \"abonnement\": null\n  }\n}"
+        }
+      ]
+    }
+  ]
+}

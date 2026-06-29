@@ -41,4 +41,9 @@ class Annonce_concessionnaire extends Model
     {
         return $this->belongsTo(User::class);
     }
+
+    public function concessionnaire()
+    {
+        return $this->belongsTo(Concessionnaire::class, 'concessionaire_id');
+    }
 }

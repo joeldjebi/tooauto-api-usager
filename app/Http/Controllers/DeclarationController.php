@@ -26,6 +26,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Auth;
 use App\Services\WasabiService;
+use App\Services\FirebaseNotificationService;
 
 class DeclarationController extends Controller
 {
@@ -595,9 +596,33 @@ class DeclarationController extends Controller
         $mauvais_stationnements->type = $request->type;
 
         if ($mauvais_stationnements->save()) {
+            $notificationSent = false;
+
+            try {
+                $proprietaire = User::find($vehicule->user_id);
+
+                if ($proprietaire) {
+                    $firebaseService = new FirebaseNotificationService();
+                    $typeSignalement = (int) $request->type === 2 ? 'véhicule abandonné' : 'mauvais stationnement';
+                    $title = 'Signalement véhicule';
+                    $body = "Votre véhicule {$vehicule->matricule} a été signalé pour {$typeSignalement}.";
+
+                    $notificationSent = $firebaseService->sendToUser($proprietaire, $title, $body, [
+                        'type' => 'mauvais_stationnement',
+                        'mauvais_stationnement_id' => (string) $mauvais_stationnements->id,
+                        'vehicule_id' => (string) $vehicule->id,
+                        'immatriculation' => (string) $vehicule->matricule,
+                        'signalement_type' => (string) $request->type,
+                    ]);
+                }
+            } catch (\Exception $e) {
+                \Log::error('Erreur lors de l\'envoi de la notification de mauvais stationnement: ' . $e->getMessage());
+            }
+
             return response()->json([
                 'success' => true,
                 'message' => 'Mauvais stationnement enregistrée avec succès.',
+                'notification_sent' => $notificationSent,
             ], 201);
         } else {
             return response()->json([

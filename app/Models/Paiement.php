@@ -20,12 +20,20 @@ class Paiement extends Model
         'customerPhoneNumber',
         'user_id',
         'forfait_id',
-        'statut'
+        'statut',
+        'fineopay_reference',
+        'checkout_link',
+        'date_debut',
+        'date_fin',
+        'reponse_api',
     ];
 
     protected $casts = [
         'created_at' => 'datetime',
-        'update_at' => 'datetime'
+        'updated_at' => 'datetime',
+        'date_debut' => 'datetime',
+        'date_fin' => 'datetime',
+        'reponse_api' => 'array',
     ];
 
     // Relation avec l'utilisateur
