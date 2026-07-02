@@ -23,6 +23,7 @@ use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\EntrepriseAssuranceController;
 use App\Http\Controllers\NotationController;
 use App\Http\Controllers\SinistreAssuranceController;
+use App\Models\Pays;
 
 /*
 |--------------------------------------------------------------------------
@@ -78,7 +79,7 @@ Route::prefix('v1')->group(function () {
         // Route pour mettre à jour le mot de passe
         Route::post('/password-update/{id}', [AuthController::class, 'updatePassword']);
         Route::post('/password-update-pro/{id}', [AuthController::class, 'updatePasswordPro']);
-		
+
 		// Routes pour mettre à jour le statut first_login
         Route::post('/update-first-login/{id}', [AuthController::class, 'updateFirstLogin']);
         Route::post('/update-first-login-pro/{id}', [AuthController::class, 'updateFirstLoginPro']);
@@ -98,7 +99,7 @@ Route::prefix('v1')->group(function () {
 
         // Route pour afficher les types etablissements
         Route::get('/get-type-de-demande', [EtablissementController::class, 'getTypeDeDemande']);
-		
+
 		        // Route pour afficher les commissariat infos par categorie
         Route::post('/get-commissariat-inofs-by-categorie', [InfosController::class, 'getCommissariatInofsByCategorie']);
 
@@ -146,10 +147,10 @@ Route::prefix('v1')->group(function () {
 
         // Route pour enregistrer un vehicule
         Route::post('/store-vehicule', [VehiculeController::class, 'store']);
-		
+
 		// Route pour signaler un sinistre à une assurance
         Route::post('/store-sinistre-assurance', [SinistreAssuranceController::class, 'store']);
-		
+
 		// Route pour signaler un sinistre à une assurance
         Route::post('/store-sinistre-assurance', [SinistreAssuranceController::class, 'store']);
 
@@ -189,7 +190,7 @@ Route::prefix('v1')->group(function () {
 
         // Route pour afficher les contacts util
         Route::get('/get-contact-util', [AlertController::class, 'indexContactUtil']);
-		
+
 		// Route pour afficher les entreprises d'assurance
         Route::get('/get-entreprises-assurances', [EntrepriseAssuranceController::class, 'index']);
 
@@ -358,7 +359,7 @@ Route::prefix('v1')->group(function () {
 
         // Route pour envoyer un message WhatsApp
         Route::post('/send-whatsapp-message-api', [AlertController::class, 'sendWhatsAppMessage']);
-		
+
 		// Routes pour les notations des établissements
         Route::post('/store-notation', [NotationController::class, 'store']);
         Route::post('/get-notations-by-etablissement', [NotationController::class, 'getByEtablissement']);
@@ -393,10 +394,13 @@ Route::prefix('v1')->group(function () {
     Route::post('test-sms-mtarget', [AuthController::class, 'testSendSmsMtarget']);
 
     // Route pour les categorie par livre
-    Route::post('/get-pays-all', [PaysController::class, 'indexPaysAll']);
+    Route::post('/get-pays-all', function () {
+        // Retourne la liste des pays au format JSON
+        return response()->json(Pays::all());
+    });
 
 	Route::post('/check-email', [AuthController::class, 'checkEmailExists']);
-	
+
 	Route::post('/check-email-pro', [AuthController::class, 'checkEmailExistsPro']);
 
 });
