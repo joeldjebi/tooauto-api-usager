@@ -30,14 +30,21 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
 use App\Services\FineoPayService;
+use App\Services\CodePromoService;
+use App\Services\ReductionCardService;
+use RuntimeException;
 
 class PaiementController extends Controller
 {
     protected FineoPayService $fineoPayService;
+    protected CodePromoService $codePromoService;
+    protected ReductionCardService $reductionCardService;
 
-    public function __construct(FineoPayService $fineoPayService)
+    public function __construct(FineoPayService $fineoPayService, CodePromoService $codePromoService, ReductionCardService $reductionCardService)
     {
         $this->fineoPayService = $fineoPayService;
+        $this->codePromoService = $codePromoService;
+        $this->reductionCardService = $reductionCardService;
     }
 
     /**
@@ -47,7 +54,7 @@ class PaiementController extends Controller
 	{
 		$request->validate([
 			'referenceNumber' => 'nullable|string|unique:paiements,referenceNumber',
-			'amount' => 'required|numeric',
+			'amount' => 'nullable|numeric',
 			'description' => 'nullable|string',
 			'countryCurrencyCode' => 'nullable|string',
 			'customerEmail' => 'nullable|email',
@@ -55,15 +62,27 @@ class PaiementController extends Controller
 			'customerLastname' => 'required|string',
 			'customerPhoneNumber' => 'required|string',
 			'user_id' => 'required|exists:users,id',
-			'forfait_id' => 'required|exists:forfait_usagers,id'
+			'forfait_id' => 'required|exists:forfait_usagers,id',
+			'code_promo' => 'nullable|string|max:30',
 		]);
 
 		try {
+			$forfait = Forfait_usager::findOrFail($request->forfait_id);
+			if (strtolower(trim($forfait->libelle)) === 'freemium' || (int) $forfait->prix === 0) {
+				return response()->json([
+					'status' => 'error',
+					'message' => 'Le forfait FREEMIUM doit être activé via l’abonnement gratuit.',
+				], 400);
+			}
+
+			$quote = $this->codePromoService->quote($request->code_promo, $forfait, (int) $request->user_id);
+			$codePromo = $quote['code_promo'];
+			$amount = (int) round($quote['montant_final']);
 			$referenceNumber = $request->referenceNumber ?: 'TOO-' . now()->format('YmdHis') . '-' . Str::upper(Str::random(6));
 
 			$paiement = Paiement::create([
 				'referenceNumber' => $referenceNumber,
-				'amount' => $request->amount,
+				'amount' => $amount,
 				'description' => $request->description,
 				'countryCurrencyCode' => $request->countryCurrencyCode,
 				'customerEmail' => $request->customerEmail,
@@ -72,12 +91,61 @@ class PaiementController extends Controller
 				'customerPhoneNumber' => $request->customerPhoneNumber,
 				'user_id' => $request->user_id,
 				'forfait_id' => $request->forfait_id,
+				'code_promo_id' => $codePromo ? $codePromo->id : null,
+				'montant_initial' => $quote['montant_initial'],
+				'montant_reduction' => $quote['montant_reduction'],
+				'montant_final' => $quote['montant_final'],
 				'statut' => 'en_attente'
 			]);
 
+			if ($amount <= 0) {
+				DB::beginTransaction();
+
+				try {
+					$dateDebut = now();
+					$dateFin = now()->addMonths((int) $forfait->duree);
+
+					$abonnement = AbonnementUsager::create([
+						'user_id' => $request->user_id,
+						'forfait_id' => $request->forfait_id,
+						'date_debut' => $dateDebut,
+						'date_fin' => $dateFin,
+						'statut' => 1,
+						'is_free' => 0,
+					]);
+
+					$paiement->forceFill([
+						'statut' => 'success',
+						'date_debut' => $dateDebut,
+						'date_fin' => $dateFin,
+						'reponse_api' => [
+							'provider' => 'code_promo',
+							'message' => 'Montant final nul après réduction.',
+						],
+					])->save();
+
+					$this->codePromoService->recordUtilisation($paiement, $abonnement);
+					$this->reductionCardService->assignCardsToSubscription($abonnement);
+					DB::commit();
+				} catch (\Throwable $e) {
+					DB::rollBack();
+					throw $e;
+				}
+
+				return response()->json([
+					'status' => 'success',
+					'message' => 'Abonnement activé avec le code promo.',
+					'data' => [
+						'paiement' => $paiement,
+						'abonnement' => $abonnement,
+						'promo' => $this->formatPromoQuote($quote),
+					],
+				], 201);
+			}
+
 			$checkoutPayload = [
 				'title' => $request->description ?: 'Paiement abonnement TOO AUTO',
-				'amount' => (int) $request->amount,
+				'amount' => $amount,
 				'callbackUrl' => $this->fineoPayService->callbackUrl(),
 				'syncRef' => $referenceNumber,
 				'inputs' => [],
@@ -133,10 +201,16 @@ class PaiementController extends Controller
 					'paiement' => $paiement,
 					'checkoutLink' => $checkoutLink,
 					'syncRef' => $referenceNumber,
+					'promo' => $this->formatPromoQuote($quote),
 					'fineopay_request' => $fineoPayRequest,
 				],
 			], 201);
 
+		} catch (RuntimeException $e) {
+			return response()->json([
+				'status' => 'error',
+				'message' => $e->getMessage(),
+			], 422);
 		} catch (\Illuminate\Http\Client\RequestException $e) {
 			$fineoPayPayload = $e->response ? $e->response->json() : null;
 			$httpStatus = $e->response ? $e->response->status() : 500;
@@ -243,6 +317,8 @@ class PaiementController extends Controller
 				'is_free'    => 1,
 			]);
 
+			$this->reductionCardService->assignCardsToSubscription($abonnement);
+
 			return response()->json([
 				'status'  => 'success',
 				'message' => 'Abonnement gratuit enregistré avec succès',
@@ -287,8 +363,8 @@ class PaiementController extends Controller
 
 			$paiement = Paiement::where([
 				'referenceNumber' => $reference,
-				'amount' => intval($forfait->prix),
 				'user_id' => $userId,
+				'forfait_id' => $forfaitId,
 			])->whereIn('statut', ['en_attente', 'failed'])->first();
 
 			if (!$paiement) {
@@ -332,6 +408,8 @@ class PaiementController extends Controller
 						'forfait_id' => $forfaitId,
 						'date_debut' => $dateDebut,
 						'date_fin' => $dateFin,
+						'statut' => 1,
+						'is_free' => 0,
 					]);
 
 					$paiement->update([
@@ -340,6 +418,9 @@ class PaiementController extends Controller
 						'date_fin' => $dateFin,
 						'reponse_api' => $result,
 					]);
+
+					$this->codePromoService->recordUtilisation($paiement, $abonnement);
+					$this->reductionCardService->assignCardsToSubscription($abonnement);
 
 					DB::commit();
 
@@ -539,6 +620,9 @@ class PaiementController extends Controller
 				],
 			])->save();
 
+			$this->codePromoService->recordUtilisation($paiement, $abonnement);
+			$this->reductionCardService->assignCardsToSubscription($abonnement);
+
 			DB::commit();
 
 			return response()->json([
@@ -600,8 +684,8 @@ class PaiementController extends Controller
 			])->first();*/
 			$paiement = Paiement::where([
 				'referenceNumber' => $reference,
-				'amount' => intval($forfait->prix),
 				'user_id' => $userId,
+				'forfait_id' => $forfaitId,
 			])->whereIn('statut', ['en_attente', 'failed'])->first();
 
 			if (!$paiement) {
@@ -652,6 +736,8 @@ class PaiementController extends Controller
 					$abonnement->forfait_id = $forfaitId;
 					$abonnement->date_debut = now();
 					$abonnement->date_fin = now()->addMonths((int) $forfait->duree);
+					$abonnement->statut = 1;
+					$abonnement->is_free = 0;
 					$abonnement->save();
 
 					// Mise à jour du paiement
@@ -661,6 +747,9 @@ class PaiementController extends Controller
 						'date_fin' => now()->addMonths((int) $forfait->duree),
 						'reponse_api' => $result
 					]);
+
+					$this->codePromoService->recordUtilisation($paiement, $abonnement);
+					$this->reductionCardService->assignCardsToSubscription($abonnement);
 
 					\DB::commit();
 
@@ -734,6 +823,24 @@ class PaiementController extends Controller
             ]);
         }
     }
+
+	private function formatPromoQuote(array $quote): ?array
+	{
+		$codePromo = $quote['code_promo'] ?? null;
+
+		if (!$codePromo) {
+			return null;
+		}
+
+		return [
+			'code' => $codePromo->code,
+			'pourcentage' => (float) $codePromo->pourcentage,
+			'partenaire' => optional($codePromo->partenaire)->nom,
+			'montant_initial' => $quote['montant_initial'],
+			'montant_reduction' => $quote['montant_reduction'],
+			'montant_final' => $quote['montant_final'],
+		];
+	}
 	
 	
 	public function retryPayment($reference)

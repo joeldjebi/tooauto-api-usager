@@ -19,6 +19,8 @@ use App\Http\Controllers\InfosController;
 use App\Http\Controllers\TvController;
 use App\Http\Controllers\PlanController;
 use App\Http\Controllers\PaiementController;
+use App\Http\Controllers\CodePromoController;
+use App\Http\Controllers\ReductionCardController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\EntrepriseAssuranceController;
 use App\Http\Controllers\NotationController;
@@ -350,9 +352,13 @@ Route::prefix('v1')->group(function () {
 		// Route pour afficher les plan d'abonnement
 		Route::get('/forfaits-avantages', [PlanController::class, 'apiForfaitsAvecAvantages']);
 		Route::get('/categories-services-abonnement', [PlanController::class, 'apiCategoriesServicesByAbonnement']);
+		Route::post('/verifier-code-promo', [CodePromoController::class, 'verifier']);
 		Route::post('/store-paiement', [PaiementController::class, 'storePaiement']);
 		Route::post('/store-paiement-free', [PaiementController::class, 'storeAbonnementGratuit']);
 		Route::post('/paiement/check-statut', [PaiementController::class, 'checkStatutPaiement']);
+		Route::get('/mes-cartes-reduction', [ReductionCardController::class, 'index']);
+		Route::post('/verifier-carte-reduction', [ReductionCardController::class, 'verifier']);
+		Route::post('/appliquer-carte-reduction', [ReductionCardController::class, 'appliquer']);
 
 		// Route pour afficher la page de vérification
 		Route::post('/paiement/verifier-statut', [PaiementController::class, 'verifierStatutPaiementApi']);

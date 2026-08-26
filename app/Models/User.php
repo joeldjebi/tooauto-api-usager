@@ -77,4 +77,9 @@ class User extends Authenticatable implements JWTSubject
         return $this->hasMany(Notation::class, 'user_id');
     }
 
+    public function reductionCards()
+    {
+        return $this->hasMany(UserReductionCard::class, 'user_id');
+    }
+
 }

@@ -40,4 +40,9 @@ class AbonnementUsager extends Model
     {
         return $this->belongsTo(Forfait_usager::class, 'forfait_id');
     }
+
+    public function reductionCards()
+    {
+        return $this->hasMany(UserReductionCard::class, 'abonnement_usager_id');
+    }
 }

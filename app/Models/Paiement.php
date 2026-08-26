@@ -20,6 +20,10 @@ class Paiement extends Model
         'customerPhoneNumber',
         'user_id',
         'forfait_id',
+        'code_promo_id',
+        'montant_initial',
+        'montant_reduction',
+        'montant_final',
         'statut',
         'fineopay_reference',
         'checkout_link',
@@ -33,6 +37,9 @@ class Paiement extends Model
         'updated_at' => 'datetime',
         'date_debut' => 'datetime',
         'date_fin' => 'datetime',
+        'montant_initial' => 'decimal:2',
+        'montant_reduction' => 'decimal:2',
+        'montant_final' => 'decimal:2',
         'reponse_api' => 'array',
     ];
 
