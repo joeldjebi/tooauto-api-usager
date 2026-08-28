@@ -99,8 +99,9 @@ class PlanController extends Controller
 				'sousCategorieService.ssCategorieService',
 			])
 			->where('statut', 1)
-			->orderBy('id')
-			->get()
+            ->orderBy('order_by')
+            ->orderBy('id')
+            ->get()
 			->filter(function ($categorie) use ($abonnementActif, $abonnementExpire, $forfaitCategorieIds) {
 				$categorieDansForfait = in_array((int) $categorie->id, $forfaitCategorieIds, true);
 
@@ -301,6 +302,6 @@ class PlanController extends Controller
 			'pro_or_usager' => $ssCategorie->pro_or_usager ?? null,
 		];
 	}
-	
-	
+
+
 }
