@@ -47,4 +47,9 @@ return [
         'api_key' => env('FINEOPAY_API_KEY'),
         'callback_token' => env('FINEOPAY_CALLBACK_TOKEN'),
     ],
+
+    'register_auto_abonnement' => [
+        'enabled' => env('REGISTER_AUTO_ABONNEMENT', false),
+        'forfait' => env('REGISTER_AUTO_ABONNEMENT_FORFAIT', 'FREEMIUM'),
+    ],
 ];

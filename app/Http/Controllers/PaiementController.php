@@ -258,8 +258,8 @@ class PaiementController extends Controller
 			], 500);
 		}
 	}
-	
-		public function storeAbonnementGratuit(Request $request)
+
+	public function storeAbonnementGratuit(Request $request)
 	{
 		// Validation
 		$data = $request->validate([
@@ -317,8 +317,6 @@ class PaiementController extends Controller
 				'is_free'    => 1,
 			]);
 
-			$this->reductionCardService->assignCardsToSubscription($abonnement);
-
 			return response()->json([
 				'status'  => 'success',
 				'message' => 'Abonnement gratuit enregistré avec succès',
@@ -339,7 +337,7 @@ class PaiementController extends Controller
 	}
 
 
-	
+
 	public function verifierStatutPaiementApi(Request $request): JsonResponse
 	{
 		$validated = $request->validate([
@@ -648,7 +646,7 @@ class PaiementController extends Controller
 			], 500);
 		}
 	}
-	
+
 	public function verifierStatutPaiement($reference, $forfaitId, $userId)
 	{
 		try {
@@ -672,8 +670,8 @@ class PaiementController extends Controller
 			if (strtolower(trim($forfait->libelle)) === 'freemium' || (int) $forfait->prix === 0) {
 				throw new \Exception('Le forfait FREEMIUM doit être activé via l’abonnement gratuit.');
 			}
-			
-			
+
+
 
 			// Vérification de l'existence du paiement
 			/*$paiement = Paiement::where([
@@ -793,10 +791,10 @@ class PaiementController extends Controller
 			];
 		}
 	}
-	
-	
-	    
-	
+
+
+
+
 	public function pageVerification($reference, $forfaitId, $userId)
     {
         try {
@@ -841,8 +839,8 @@ class PaiementController extends Controller
 			'montant_final' => $quote['montant_final'],
 		];
 	}
-	
-	
+
+
 	public function retryPayment($reference)
 	{
 		try {
@@ -865,16 +863,16 @@ class PaiementController extends Controller
 			return redirect()->back()->with('error', $e->getMessage());
 		}
 	}
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
-	
+
+
+
+
+
+
+
+
+
+
+
+
 }

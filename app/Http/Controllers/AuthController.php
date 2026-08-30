@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Models\Chauffeur;
 use App\Models\Verify_code;
 use App\Models\AbonnementUsager;
+use App\Models\Forfait_usager;
 use Validator;
 use Tymon\JWTAuth\Facades\JWTAuth;
 use Tymon\JWTAuth\Exceptions\JWTException;
@@ -26,20 +27,23 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use App\Services\SmsService;
 use App\Services\WasabiService;
+use App\Services\ReductionCardService;
 
 class AuthController extends Controller
 {
     protected $wasabiService;
     protected $smsService;
+    protected $reductionCardService;
 
         /**
      * Create a new AuthController instance.
      *
      * @return void
      */
-	public function __construct(WasabiService $wasabiService, SmsService $smsService) {
+	public function __construct(WasabiService $wasabiService, SmsService $smsService, ReductionCardService $reductionCardService) {
         $this->wasabiService = $wasabiService;
         $this->smsService = $smsService;
+        $this->reductionCardService = $reductionCardService;
         $this->middleware('auth:api', ['except' => [
             'login','loginPro', 'register', 'sendOtpForRegister', 'verifyOtp',
             'verifyNumberPasswordForget', 'passwordForgetUpdate',
@@ -531,6 +535,7 @@ class AuthController extends Controller
         // Utilisation d'une transaction pour garantir l'intégrité des données
         DB::beginTransaction();
         try {
+            $abonnement = null;
 
             // Création de l'utilisateur
             $user = new User();
@@ -542,14 +547,37 @@ class AuthController extends Controller
 
             $user->save();
 
+            if ($this->shouldAssignRegisterAbonnement()) {
+                $forfait = $this->getRegisterAbonnementForfait();
+                $dateDebut = now();
+                $dateFin = now()->addMonths((int) $forfait->duree);
+
+                $abonnement = AbonnementUsager::create([
+                    'user_id' => $user->id,
+                    'forfait_id' => $forfait->id,
+                    'date_debut' => $dateDebut,
+                    'date_fin' => $dateFin,
+                    'statut' => 1,
+                    'is_free' => 1,
+                ]);
+
+                $this->reductionCardService->assignCardsToSubscription($abonnement);
+            }
+
             // Commit de la transaction
             DB::commit();
 
-            return response()->json([
+            $response = [
                 'success' => true,
                 'message' => 'Utilisateur enregistré avec succès.',
                 'user' => $user,
-            ], 201); // Utilisation du code HTTP 201 pour "Created"
+            ];
+
+            if ($abonnement) {
+                $response['abonnement'] = $abonnement;
+            }
+
+            return response()->json($response, 201); // Utilisation du code HTTP 201 pour "Created"
 
         } catch (\Exception $e) {
             // Rollback de la transaction en cas d'erreur
@@ -561,6 +589,29 @@ class AuthController extends Controller
                 'dev' => $e->getMessage(),
             ], 500);
         }
+    }
+
+    private function shouldAssignRegisterAbonnement(): bool
+    {
+        return (bool) config('services.register_auto_abonnement.enabled', false);
+    }
+
+    private function getRegisterAbonnementForfait(): Forfait_usager
+    {
+        $libelle = Str::upper(trim((string) config('services.register_auto_abonnement.forfait', 'FREEMIUM')));
+        $allowedForfaits = ['FREEMIUM', 'PERSONNEL', 'FAMILLE'];
+
+        if (!in_array($libelle, $allowedForfaits, true)) {
+            throw new \RuntimeException('Configuration REGISTER_AUTO_ABONNEMENT_FORFAIT invalide.');
+        }
+
+        $forfait = Forfait_usager::whereRaw('UPPER(TRIM(libelle)) = ?', [$libelle])->first();
+
+        if (!$forfait) {
+            throw new \RuntimeException('Forfait automatique introuvable: ' . $libelle);
+        }
+
+        return $forfait;
     }
 
     public function updateUser(Request $request, $id)
