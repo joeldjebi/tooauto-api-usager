@@ -35,8 +35,8 @@ class ReductionCardService
                 'user_id' => $abonnement->user_id,
                 'abonnement_usager_id' => $abonnement->id,
                 'forfait_usager_id' => $abonnement->forfait_id,
-                'card_code' => $this->generateUniqueValue('card_code', 'RC'),
-                'qr_code' => $this->generateUniqueValue('qr_code', 'QR'),
+                'card_code' => $this->generateCardCode(),
+                'qr_code' => $this->generateQrCode(),
                 'date_debut' => $abonnement->date_debut,
                 'date_fin' => $abonnement->date_fin,
                 'statut' => 1,
@@ -172,11 +172,20 @@ class ReductionCardService
         return $userCard;
     }
 
-    private function generateUniqueValue(string $column, string $prefix): string
+    private function generateCardCode(): string
     {
         do {
-            $value = $prefix . '-' . now()->format('YmdHis') . '-' . Str::upper(Str::random(8));
-        } while (UserReductionCard::where($column, $value)->exists());
+            $value = 'RC-' . now()->format('dm') . '-' . Str::upper(Str::random(8));
+        } while (UserReductionCard::where('card_code', $value)->exists());
+
+        return $value;
+    }
+
+    private function generateQrCode(): string
+    {
+        do {
+            $value = 'TOOAUTO-REDUCTION-' . Str::upper(Str::random(18));
+        } while (UserReductionCard::where('qr_code', $value)->exists());
 
         return $value;
     }

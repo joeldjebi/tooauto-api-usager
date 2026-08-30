@@ -10,11 +10,13 @@ class ReductionCard extends Model
 
     protected $fillable = [
         'forfait_usager_id',
+        'name',
         'nom',
         'discount_type',
         'discount_value',
         'description',
         'statut',
+        'created_by',
     ];
 
     protected $casts = [

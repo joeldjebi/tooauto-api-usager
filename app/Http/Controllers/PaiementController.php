@@ -317,6 +317,8 @@ class PaiementController extends Controller
 				'is_free'    => 1,
 			]);
 
+			$this->reductionCardService->assignCardsToSubscription($abonnement);
+
 			return response()->json([
 				'status'  => 'success',
 				'message' => 'Abonnement gratuit enregistré avec succès',
