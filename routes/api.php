@@ -21,6 +21,7 @@ use App\Http\Controllers\PlanController;
 use App\Http\Controllers\PaiementController;
 use App\Http\Controllers\CodePromoController;
 use App\Http\Controllers\ReductionCardController;
+use App\Http\Controllers\API\UserCampaignController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\EntrepriseAssuranceController;
 use App\Http\Controllers\NotationController;
@@ -359,6 +360,12 @@ Route::prefix('v1')->group(function () {
 		Route::get('/mes-cartes-reduction', [ReductionCardController::class, 'index']);
 		Route::post('/verifier-carte-reduction', [ReductionCardController::class, 'verifier']);
 		Route::post('/appliquer-carte-reduction', [ReductionCardController::class, 'appliquer']);
+		Route::prefix('usager/campaigns')->group(function () {
+			Route::get('/', [UserCampaignController::class, 'index']);
+			Route::get('/type/{establishment_type}', [UserCampaignController::class, 'byType']);
+			Route::get('/establishment/{establishment_type}/{establishment_id}', [UserCampaignController::class, 'byEstablishment']);
+			Route::get('/{campaign}', [UserCampaignController::class, 'show'])->whereNumber('campaign');
+		});
 
 		// Route pour afficher la page de vérification
 		Route::post('/paiement/verifier-statut', [PaiementController::class, 'verifierStatutPaiementApi']);
