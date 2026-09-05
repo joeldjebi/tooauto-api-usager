@@ -287,6 +287,8 @@ Route::prefix('v1')->group(function () {
         // Route pour afficher les stations service normal
         Route::post('/get-station-service-normal', [EtablissementController::class, 'getAllStationServiceNormal']);
         Route::get('/get-station-service-normal-list', [EtablissementController::class, 'getAllStationServiceNormalList']);
+        Route::post('/get-station-de-lavage', [EtablissementController::class, 'getStationDeLavage']);
+        Route::get('/get-station-de-lavage', [EtablissementController::class, 'getStationDeLavage']);
 
         // Route pour afficher les stations service electrique
         Route::post('/get-station-service-electrique', [EtablissementController::class, 'getAllStationServiceElectrique']);

@@ -13,6 +13,7 @@ use App\Models\Promotion;
 use App\Models\Commissariat;
 use App\Models\Categorie_service;
 use App\Models\Station_service;
+use App\Models\StationDeLavage;
 use App\Models\Commune;
 use App\Models\Pays;
 use App\Models\Ville;
@@ -20,6 +21,7 @@ use App\Models\Service;
 use App\Models\Sapeur_pompier;
 use App\Models\Type_de_prestation;
 use App\Models\TypeDePrestation;
+use App\Models\TypeLavage;
 use App\Models\Type_de_piece;
 use App\Models\Type_de_demande;
 use Validator;
@@ -93,26 +95,28 @@ class EtablissementController extends Controller
             'etablissements' => $etablissements,
         ], 200);
     }*/
-	public function index(Request $request)
-	{
-		// Récupérer les établissements avec la moyenne des notes
-		$etablissements = Etablissement::withAvg('notations as moyenne_note', 'note')
-			->orderBy('id', 'desc')
-			->get();
+		public function index(Request $request)
+		{
+			$perPage = $this->resolvePerPage($request);
 
-		// Vérifier si des établissements existent
-		if ($etablissements->isEmpty()) {
-			return response()->json([
-				'success' => false,
-				'message' => 'Aucun établissement enregistré pour le moment.',
+			// Récupérer les établissements avec la moyenne des notes
+			$etablissements = Etablissement::withAvg('notations as moyenne_note', 'note')
+				->orderBy('id', 'desc')
+				->paginate($perPage);
+	
+			// Vérifier si des établissements existent
+			if ($etablissements->getCollection()->isEmpty()) {
+				return response()->json([
+					'success' => false,
+					'message' => 'Aucun établissement enregistré pour le moment.',
 			], 404);
 		}
 
 		// Récupérer tous les types de prestations en une seule requête
-		$allTypesPrestations = TypeDePrestation::all()->keyBy('id');
-
-		// Transformer les données
-		$etablissements->transform(function ($etablissement) use ($allTypesPrestations) {
+			$allTypesPrestations = TypeDePrestation::all()->keyBy('id');
+	
+			// Transformer les données
+			$etablissements->getCollection()->transform(function ($etablissement) use ($allTypesPrestations) {
 
 			// ✅ Moyenne des notes (toujours float)
 			$etablissement->moyenne_note = $etablissement->moyenne_note !== null
@@ -144,11 +148,12 @@ class EtablissementController extends Controller
 
 		// Retour JSON
 		return response()->json([
-			'success' => true,
-			'message' => 'Liste des établissements.',
-			'etablissements' => $etablissements,
-		], 200);
-	}
+				'success' => true,
+				'message' => 'Liste des établissements.',
+				'etablissements' => $etablissements->items(),
+				'pagination' => $this->paginationMeta($etablissements),
+			], 200);
+		}
 
     private function attachEtablissementMediaUrls($etablissement)
     {
@@ -180,8 +185,8 @@ class EtablissementController extends Controller
         return 'etablissement/' . trim($type, '/') . '/' . ltrim($path, '/');
     }
 
-    private function attachStationServiceMediaUrls($stationService)
-    {
+	    private function attachStationServiceMediaUrls($stationService)
+	    {
         if (!$stationService || empty($stationService->logo)) {
             return $stationService;
         }
@@ -203,8 +208,34 @@ class EtablissementController extends Controller
             return ltrim($path, '/');
         }
 
-        return 'station_services/logo/' . ltrim($path, '/');
-    }
+	        return 'station_services/logo/' . ltrim($path, '/');
+	    }
+
+	private function attachStationDeLavageMediaUrls($stationDeLavage)
+	{
+		if (!$stationDeLavage || empty($stationDeLavage->logo)) {
+			return $stationDeLavage;
+		}
+
+		$stationDeLavage->logo = $this->wasabiService->temporaryUrl(
+			$this->normalizeStationDeLavageLogoPath($stationDeLavage->logo)
+		);
+
+		return $stationDeLavage;
+	}
+
+	private function normalizeStationDeLavageLogoPath($path)
+	{
+		if (empty($path) || filter_var($path, FILTER_VALIDATE_URL)) {
+			return $path;
+		}
+
+		if (Str::contains($path, '/')) {
+			return ltrim($path, '/');
+		}
+
+		return 'station_de_lavages/logos/' . ltrim($path, '/');
+	}
 
     /**
      * Récupérer les libellés des types de prestations
@@ -317,7 +348,7 @@ class EtablissementController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function getTypeEtablissement()
+	    public function getTypeEtablissement()
     {
         // Récupérer les établissements triés par ID décroissant
         $type_etablissements = TypeEtablissement::orderBy('id', 'desc')->get();
@@ -1497,8 +1528,8 @@ class EtablissementController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function getEtablissementByTypeDePrestation(Request $request)
-    {
+	    public function getEtablissementByTypeDePrestation(Request $request)
+	    {
         // Vérifier si l'utilisateur est authentifié
         $user = auth()->user();
         if (!$user) {
@@ -1509,9 +1540,11 @@ class EtablissementController extends Controller
         }
 
         // Validation des données d'entrée
-        $validator = Validator::make($request->all(), [
-            'type_de_prestation_id' => 'required|exists:type_de_prestations,id',
-        ]);
+	        $validator = Validator::make($request->all(), [
+	            'type_de_prestation_id' => 'required|exists:type_de_prestations,id',
+	            'per_page' => 'nullable|integer|min:1|max:100',
+	            'page' => 'nullable|integer|min:1',
+	        ]);
 
         if ($validator->fails()) {
             return response()->json([
@@ -1521,31 +1554,33 @@ class EtablissementController extends Controller
             ], 422);
         }
 
-        // Récupérer les établissements avec des données JSON valides
-        $etablissements = Etablissement::whereNotNull('type_de_prestations')
-            ->whereRaw('JSON_VALID(type_de_prestations)')
-            ->whereJsonContains('type_de_prestations', $request->type_de_prestation_id)
-            ->orderBy('id', 'desc')
-            ->get();
+	        $perPage = $this->resolvePerPage($request);
 
-        // Vérifier si des établissements existent
-        if ($etablissements->isEmpty()) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Aucun établissement enregistré pour ce type de prestation.',
+	        // Récupérer les établissements avec des données JSON valides
+	        $etablissements = Etablissement::whereNotNull('type_de_prestations')
+	            ->whereRaw('JSON_VALID(type_de_prestations)')
+	            ->whereJsonContains('type_de_prestations', $request->type_de_prestation_id)
+	            ->orderBy('id', 'desc')
+	            ->paginate($perPage);
+	
+	        // Vérifier si des établissements existent
+	        if ($etablissements->getCollection()->isEmpty()) {
+	            return response()->json([
+	                'success' => false,
+	                'message' => 'Aucun établissement enregistré pour ce type de prestation.',
             ], 404);
         }
 
         // Récupérer tous les types de prestations en une seule requête
-        $allTypesPrestations = TypeDePrestation::all()->keyBy('id');
-
-        // Ajouter les libellés des types de prestations à chaque établissement
-        $etablissements = $etablissements->map(function ($etablissement) use ($allTypesPrestations) {
-            $etablissement->types_prestations_libelles = $this->getTypesPrestationsLibelles($etablissement->type_de_prestations, $allTypesPrestations);
-            $etablissement->types_prestations_complets = $this->getTypesPrestationsComplets($etablissement->type_de_prestations, $allTypesPrestations);
-            $etablissement = $this->attachEtablissementMediaUrls($etablissement);
-
-            return $etablissement->toArray();
+	        $allTypesPrestations = TypeDePrestation::all()->keyBy('id');
+	
+	        // Ajouter les libellés des types de prestations à chaque établissement
+	        $etablissements->getCollection()->transform(function ($etablissement) use ($allTypesPrestations) {
+	            $etablissement->types_prestations_libelles = $this->getTypesPrestationsLibelles($etablissement->type_de_prestations, $allTypesPrestations);
+	            $etablissement->types_prestations_complets = $this->getTypesPrestationsComplets($etablissement->type_de_prestations, $allTypesPrestations);
+	            $etablissement = $this->attachEtablissementMediaUrls($etablissement);
+	
+	            return $etablissement->toArray();
         });
 
         // Récupérer le libelle du type de prestation recherché
@@ -1556,13 +1591,100 @@ class EtablissementController extends Controller
         // Retourner la liste des établissements avec le libelle
         return response()->json([
             'success' => true,
-            'message' => 'Liste des établissements trouvés.',
-            'type_de_prestation_libelle' => $typeDePrestation ? $typeDePrestation->libelle : null,
-            'etablissement_by_type_de_prestation' => $etablissements,
-        ], 200);
-    }
+	            'message' => 'Liste des établissements trouvés.',
+	            'type_de_prestation_libelle' => $typeDePrestation ? $typeDePrestation->libelle : null,
+	            'etablissement_by_type_de_prestation' => $etablissements->items(),
+	            'pagination' => $this->paginationMeta($etablissements),
+	        ], 200);
+	    }
 
-	/**
+	public function getStationDeLavage(Request $request)
+	{
+		$validator = Validator::make($request->all(), [
+			'search' => 'nullable|string|max:255',
+			'per_page' => 'nullable|integer|min:1|max:100',
+			'page' => 'nullable|integer|min:1',
+		]);
+
+		if ($validator->fails()) {
+			return response()->json([
+				'success' => false,
+				'message' => 'Données invalides',
+				'errors' => $validator->errors(),
+			], 422);
+		}
+
+		$perPage = $this->resolvePerPage($request);
+		$search = trim((string) $request->input('search', ''));
+
+		$stations = StationDeLavage::with(['typeLavages' => function ($query) {
+				$query->select('id', 'libelle', 'montant', 'montant_laveur', 'lavage_id')
+					->orderBy('id', 'asc');
+			}])
+			->where('statut', 1)
+			->when($search !== '', function ($query) use ($search) {
+				$query->where(function ($query) use ($search) {
+					$query->where('name', 'like', '%' . $search . '%')
+						->orWhere('contact', 'like', '%' . $search . '%')
+						->orWhere('adresse', 'like', '%' . $search . '%');
+				});
+			})
+			->orderBy('id', 'desc')
+			->paginate($perPage);
+
+		if ($stations->getCollection()->isEmpty()) {
+			return response()->json([
+				'success' => false,
+				'message' => 'Aucune station de lavage enregistrée pour le moment.',
+			], 404);
+		}
+
+		$stations->getCollection()->transform(function ($station) {
+			$station = $this->attachStationDeLavageMediaUrls($station);
+			$station->types_lavages = $station->typeLavages->map(function (TypeLavage $typeLavage) {
+				return [
+					'id' => $typeLavage->id,
+					'libelle' => $typeLavage->libelle,
+					'montant' => $typeLavage->montant,
+					'montant_laveur' => $typeLavage->montant_laveur,
+				];
+			})->values();
+			unset($station->typeLavages);
+
+			return $station;
+		});
+
+		return response()->json([
+			'success' => true,
+			'message' => 'Liste des stations de lavage.',
+			'station_de_lavages' => $stations->items(),
+			'pagination' => $this->paginationMeta($stations),
+		], 200);
+	}
+
+	private function resolvePerPage(Request $request): int
+	{
+		$perPage = (int) $request->input('per_page', 15);
+
+		return max(1, min($perPage, 100));
+	}
+
+	private function paginationMeta(LengthAwarePaginator $paginator): array
+	{
+		return [
+			'current_page' => $paginator->currentPage(),
+			'per_page' => $paginator->perPage(),
+			'total' => $paginator->total(),
+			'last_page' => $paginator->lastPage(),
+			'from' => $paginator->firstItem(),
+			'to' => $paginator->lastItem(),
+			'has_more_pages' => $paginator->hasMorePages(),
+			'next_page_url' => $paginator->nextPageUrl(),
+			'prev_page_url' => $paginator->previousPageUrl(),
+		];
+	}
+
+		/**
      * Crée un nouvel share.
      */
     public function shareLocalisation(Request $request)
