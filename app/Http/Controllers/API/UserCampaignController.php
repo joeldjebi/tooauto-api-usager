@@ -7,15 +7,22 @@ use App\Models\Etablissement;
 use App\Models\ReductionCampaign;
 use App\Models\Station_service;
 use App\Models\StationDeLavage;
+use App\Services\WasabiService;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Str;
 
 class UserCampaignController extends Controller
 {
+    protected WasabiService $wasabiService;
+
+    public function __construct(WasabiService $wasabiService)
+    {
+        $this->wasabiService = $wasabiService;
+    }
+
     public function index(Request $request)
     {
         $validated = $request->validate([
@@ -78,9 +85,8 @@ class UserCampaignController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Liste des campagnes de réduction.',
-            'campaigns' => $campaigns->items(),
+            'data' => $campaigns->items(),
             'pagination' => $this->paginationMeta($campaigns),
-            'data' => $campaigns,
         ]);
     }
 
@@ -244,11 +250,11 @@ class UserCampaignController extends Controller
         $data = $establishment->toArray();
 
         if (!empty($data['logo'])) {
-            $data['logo_url'] = $this->imageUrl($data['logo']);
+            $data['logo_url'] = $this->signedImageUrl($data['logo']);
         }
 
         if (!empty($data['cover'])) {
-            $data['cover_url'] = $this->imageUrl($data['cover']);
+            $data['cover_url'] = $this->signedImageUrl($data['cover']);
         }
 
         return $data;
@@ -386,6 +392,11 @@ class UserCampaignController extends Controller
 
     private function imageUrl(?string $image): ?string
     {
+        return $this->signedImageUrl($image);
+    }
+
+    private function signedImageUrl(?string $image): ?string
+    {
         if (!$image) {
             return null;
         }
@@ -394,8 +405,10 @@ class UserCampaignController extends Controller
             return $image;
         }
 
-        return Str::startsWith($image, '/')
-            ? url($image)
-            : url('/' . ltrim($image, '/'));
+        try {
+            return $this->wasabiService->temporaryUrl(ltrim($image, '/'));
+        } catch (\Throwable $e) {
+            return null;
+        }
     }
 }
