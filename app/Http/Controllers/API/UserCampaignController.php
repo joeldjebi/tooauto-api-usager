@@ -31,8 +31,10 @@ class UserCampaignController extends Controller
             'per_page' => 'nullable|integer|min:1|max:100',
         ]);
 
+        $availableOnly = $request->boolean('available_only', false);
+
         $campaigns = ReductionCampaign::query()
-            ->when(!empty($validated['available_only']), function (Builder $query) {
+            ->when($availableOnly, function (Builder $query) {
                 $this->applyAvailableCampaignRules($query);
             })
             ->when(!empty($validated['establishment_type']), function (Builder $query) use ($validated) {
@@ -66,7 +68,8 @@ class UserCampaignController extends Controller
                 $query->where('promotional_price', '<=', $validated['max_price']);
             })
             ->orderByDesc('created_at')
-            ->paginate($validated['per_page'] ?? 15);
+            ->paginate($validated['per_page'] ?? 15)
+            ->appends($request->query());
 
         $campaigns->getCollection()->transform(function (ReductionCampaign $campaign) {
             return $this->formatCampaign($campaign);
@@ -75,6 +78,8 @@ class UserCampaignController extends Controller
         return response()->json([
             'success' => true,
             'message' => 'Liste des campagnes de réduction.',
+            'campaigns' => $campaigns->items(),
+            'pagination' => $this->paginationMeta($campaigns),
             'data' => $campaigns,
         ]);
     }
@@ -167,6 +172,21 @@ class UserCampaignController extends Controller
                             ->orWhereColumn('quantity_used', '<', 'quantity_available');
                     });
             });
+    }
+
+    private function paginationMeta($paginator): array
+    {
+        return [
+            'current_page' => $paginator->currentPage(),
+            'per_page' => $paginator->perPage(),
+            'total' => $paginator->total(),
+            'last_page' => $paginator->lastPage(),
+            'from' => $paginator->firstItem(),
+            'to' => $paginator->lastItem(),
+            'has_more_pages' => $paginator->hasMorePages(),
+            'next_page_url' => $paginator->nextPageUrl(),
+            'prev_page_url' => $paginator->previousPageUrl(),
+        ];
     }
 
     private function formatCampaign(ReductionCampaign $campaign): array
