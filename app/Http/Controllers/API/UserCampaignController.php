@@ -27,10 +27,14 @@ class UserCampaignController extends Controller
             'discount_type' => 'nullable|string|in:percentage,fixed',
             'min_price' => 'nullable|numeric|min:0',
             'max_price' => 'nullable|numeric|min:0',
+            'available_only' => 'nullable|boolean',
             'per_page' => 'nullable|integer|min:1|max:100',
         ]);
 
-        $campaigns = $this->activeCampaignQuery()
+        $campaigns = ReductionCampaign::query()
+            ->when(!empty($validated['available_only']), function (Builder $query) {
+                $this->applyAvailableCampaignRules($query);
+            })
             ->when(!empty($validated['establishment_type']), function (Builder $query) use ($validated) {
                 $query->where('establishment_type', $validated['establishment_type']);
             })
@@ -70,7 +74,7 @@ class UserCampaignController extends Controller
 
         return response()->json([
             'success' => true,
-            'message' => 'Liste des campagnes de réduction disponibles.',
+            'message' => 'Liste des campagnes de réduction.',
             'data' => $campaigns,
         ]);
     }
@@ -146,10 +150,14 @@ class UserCampaignController extends Controller
 
     private function activeCampaignQuery(): Builder
     {
+        return $this->applyAvailableCampaignRules(ReductionCampaign::query());
+    }
+
+    private function applyAvailableCampaignRules(Builder $query): Builder
+    {
         $today = Carbon::today();
 
-        return ReductionCampaign::query()
-            ->where('statut', 1)
+        return $query->where('statut', 1)
             ->whereDate('date_debut', '<=', $today)
             ->whereDate('date_fin', '>=', $today)
             ->where(function (Builder $query) {
