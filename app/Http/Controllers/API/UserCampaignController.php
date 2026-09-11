@@ -3,7 +3,10 @@
 namespace App\Http\Controllers\API;
 
 use App\Http\Controllers\Controller;
+use App\Models\Etablissement;
 use App\Models\ReductionCampaign;
+use App\Models\Station_service;
+use App\Models\StationDeLavage;
 use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -166,6 +169,7 @@ class UserCampaignController extends Controller
             'id' => $campaign->id,
             'establishment_type' => $campaign->establishment_type,
             'establishment_id' => $campaign->establishment_id,
+            'establishment' => $this->resolveCampaignEstablishment($campaign),
             'name' => $campaign->name,
             'image' => $campaign->image,
             'image_url' => $this->imageUrl($campaign->image),
@@ -189,6 +193,37 @@ class UserCampaignController extends Controller
             'created_at' => optional($campaign->created_at)->toDateTimeString(),
             'updated_at' => optional($campaign->updated_at)->toDateTimeString(),
         ];
+    }
+
+    private function resolveCampaignEstablishment(ReductionCampaign $campaign): ?array
+    {
+        $establishmentId = (int) $campaign->establishment_id;
+
+        if ($establishmentId <= 0) {
+            return null;
+        }
+
+        $establishment = match ($campaign->establishment_type) {
+            'lavage' => StationDeLavage::with('typeLavages')->find($establishmentId),
+            'station' => Station_service::with(['ville', 'commune'])->find($establishmentId),
+            default => Etablissement::with(['type_etablissement', 'pays', 'ville', 'commune'])->find($establishmentId),
+        };
+
+        if (!$establishment) {
+            return null;
+        }
+
+        $data = $establishment->toArray();
+
+        if (!empty($data['logo'])) {
+            $data['logo_url'] = $this->imageUrl($data['logo']);
+        }
+
+        if (!empty($data['cover'])) {
+            $data['cover_url'] = $this->imageUrl($data['cover']);
+        }
+
+        return $data;
     }
 
     private function resolveCampaignPrestations(ReductionCampaign $campaign): array
