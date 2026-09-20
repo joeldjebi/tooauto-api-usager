@@ -52,4 +52,19 @@ return [
         'enabled' => env('REGISTER_AUTO_ABONNEMENT', false),
         'forfait' => env('REGISTER_AUTO_ABONNEMENT_FORFAIT', 'FREEMIUM'),
     ],
+
+    'assistant' => [
+        'provider' => env('AI_PROVIDER', 'anthropic'),
+        'enabled' => env('AI_ASSISTANT_ENABLED', true),
+        'max_results' => env('AI_ASSISTANT_MAX_RESULTS', 10),
+        'api_key' => env('ANTHROPIC_API_KEY'),
+        'model' => env('ASSISTANT_MODEL', 'claude-sonnet-5'),
+        'weekly_token_limit' => env('ASSISTANT_WEEKLY_TOKEN_LIMIT', 20000),
+        'max_tool_iterations' => env('ASSISTANT_MAX_TOOL_ITERATIONS', 5),
+        'ollama' => [
+            'base_url' => env('OLLAMA_BASE_URL', 'http://127.0.0.1:11434'),
+            'model' => env('OLLAMA_MODEL', 'qwen2.5-coder:7b'),
+            'timeout' => env('OLLAMA_TIMEOUT', 120),
+        ],
+    ],
 ];

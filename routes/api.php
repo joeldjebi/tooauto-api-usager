@@ -22,6 +22,7 @@ use App\Http\Controllers\PaiementController;
 use App\Http\Controllers\CodePromoController;
 use App\Http\Controllers\ReductionCardController;
 use App\Http\Controllers\API\UserCampaignController;
+use App\Http\Controllers\API\AssistantController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\EntrepriseAssuranceController;
 use App\Http\Controllers\NotationController;
@@ -367,6 +368,11 @@ Route::prefix('v1')->group(function () {
 			Route::get('/type/{establishment_type}', [UserCampaignController::class, 'byType']);
 			Route::get('/establishment/{establishment_type}/{establishment_id}', [UserCampaignController::class, 'byEstablishment']);
 			Route::get('/{campaign}', [UserCampaignController::class, 'show'])->whereNumber('campaign');
+		});
+		Route::prefix('assistant')->group(function () {
+			Route::post('/chat', [AssistantController::class, 'chat']);
+			Route::get('/conversations', [AssistantController::class, 'conversations']);
+			Route::get('/conversations/{conversation}/messages', [AssistantController::class, 'messages'])->whereNumber('conversation');
 		});
 
 		// Route pour afficher la page de vérification
