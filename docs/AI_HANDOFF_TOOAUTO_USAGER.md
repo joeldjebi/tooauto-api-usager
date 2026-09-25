@@ -222,6 +222,7 @@ Trois API ont ete paginees pour l'application mobile:
 - `POST /index-etablissement`;
 - `POST /get-type-etablissement-type-de-prestation`;
 - `GET|POST /get-station-de-lavage`.
+- `GET /get-etablissement-electrique-list`.
 
 Parametres communs: `page` et `per_page`, avec une valeur par defaut de 15 et un maximum de 100.
 
@@ -239,6 +240,8 @@ La liste des stations de lavage:
 - accepte `search` sur le nom, le contact et l'adresse;
 - charge les types de lavage dans `types_lavages`;
 - signe le logo avec le mecanisme Wasabi du controleur.
+
+La liste des etablissements electriques filtre `statut = 1` et `is_electrique = 1`, accepte une recherche sur le nom, l'adresse ou le mobile, charge les relations geographiques et signe les medias Wasabi.
 
 ## 6. Fichiers essentiels
 

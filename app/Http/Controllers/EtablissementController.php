@@ -381,6 +381,8 @@ class EtablissementController extends Controller
 			'longitude' => 'nullable|numeric',
 			'latitude' => 'nullable|numeric',
 			'service_mobile' => 'nullable|in:0,1',
+			'per_page' => 'nullable|integer|min:1|max:100',
+			'page' => 'nullable|integer|min:1',
 		]);
 
 		if ($validator->fails()) {
@@ -393,6 +395,7 @@ class EtablissementController extends Controller
 
 		$latitude = $request->latitude;
 		$longitude = $request->longitude;
+		$perPage = $this->resolvePerPage($request);
 
 		// Construire la requête de base
 		$query = Etablissement::where('type_etablissement_id', $request->type_etablissement_id)
@@ -435,10 +438,10 @@ class EtablissementController extends Controller
 			$query->orderBy('id', 'desc');
 		}
 
-		$etablissements = $query->get();
+		$etablissements = $query->paginate($perPage);
 
 		// Vérifier si des établissements existent
-		if ($etablissements->isEmpty()) {
+		if ($etablissements->getCollection()->isEmpty()) {
 			return response()->json([
 				'success' => false,
 				'message' => 'Aucun établissement trouvé avec ces critères.',
@@ -449,7 +452,7 @@ class EtablissementController extends Controller
 		$allTypesPrestations = Type_de_prestation::all()->keyBy('id');
 
 		// Ajouter les libellés des types de prestations à chaque établissement
-		$etablissements->transform(function ($etablissement) use ($allTypesPrestations) {
+		$etablissements->getCollection()->transform(function ($etablissement) use ($allTypesPrestations) {
 			// Ajouter les libellés des types de prestations
 			$etablissement->types_prestations_libelles = $this->getTypesPrestationsLibelles($etablissement->type_de_prestations, $allTypesPrestations);
 			$etablissement->types_prestations_complets = $this->getTypesPrestationsComplets($etablissement->type_de_prestations, $allTypesPrestations);
@@ -471,7 +474,8 @@ class EtablissementController extends Controller
 		return response()->json([
 			'success' => true,
 			'message' => $message,
-			'etablissements' => $etablissements,
+			'etablissements' => $etablissements->items(),
+			'pagination' => $this->paginationMeta($etablissements),
 		], 200);
 	}
 
@@ -1302,6 +1306,73 @@ class EtablissementController extends Controller
 			'success' => true,
 			'message' => "Liste des stations services électriques.",
 			'station_services' => $station_service,
+		], 200);
+	}
+
+	public function getEtablissementElectriqueList(Request $request)
+	{
+		$validator = Validator::make($request->all(), [
+			'search' => 'nullable|string|max:255',
+			'per_page' => 'nullable|integer|min:1|max:100',
+			'page' => 'nullable|integer|min:1',
+		]);
+
+		if ($validator->fails()) {
+			return response()->json([
+				'success' => false,
+				'message' => 'Les données fournies ne sont pas valides.',
+				'errors' => $validator->errors(),
+			], 422);
+		}
+
+		$search = trim((string) $request->input('search', ''));
+		$perPage = $this->resolvePerPage($request);
+
+		$etablissements = Etablissement::with(['type_etablissement', 'pays', 'ville', 'commune'])
+			->withAvg('notations as moyenne_note', 'note')
+			->where('statut', 1)
+			->where('is_electrique', 1)
+			->when($search !== '', function ($query) use ($search) {
+				$query->where(function ($query) use ($search) {
+					$query->where('name', 'like', '%' . $search . '%')
+						->orWhere('adresse', 'like', '%' . $search . '%')
+						->orWhere('mobile', 'like', '%' . $search . '%');
+				});
+			})
+			->orderByDesc('id')
+			->paginate($perPage)
+			->appends($request->query());
+
+		if ($etablissements->getCollection()->isEmpty()) {
+			return response()->json([
+				'success' => false,
+				'message' => 'Aucun établissement acceptant les engins électriques trouvé.',
+			], 404);
+		}
+
+		$allTypesPrestations = TypeDePrestation::all()->keyBy('id');
+
+		$etablissements->getCollection()->transform(function ($etablissement) use ($allTypesPrestations) {
+			$etablissement->moyenne_note = $etablissement->moyenne_note !== null
+				? (float) round($etablissement->moyenne_note, 1)
+				: 0.0;
+			$etablissement->types_prestations_libelles = $this->getTypesPrestationsLibelles(
+				$etablissement->type_de_prestations,
+				$allTypesPrestations
+			);
+			$etablissement->types_prestations_complets = $this->getTypesPrestationsComplets(
+				$etablissement->type_de_prestations,
+				$allTypesPrestations
+			);
+
+			return $this->attachEtablissementMediaUrls($etablissement);
+		});
+
+		return response()->json([
+			'success' => true,
+			'message' => 'Liste des établissements acceptant les engins électriques.',
+			'etablissements' => $etablissements->items(),
+			'pagination' => $this->paginationMeta($etablissements),
 		], 200);
 	}
 

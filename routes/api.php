@@ -295,6 +295,7 @@ Route::prefix('v1')->group(function () {
         Route::post('/get-station-service-electrique', [EtablissementController::class, 'getAllStationServiceElectrique']);
         Route::get('/get-station-service-electrique-list', [EtablissementController::class, 'getAllStationServiceElectriqueList']);
         Route::get('/get-station-service-electrique-without-payload', [EtablissementController::class, 'getAllStationServiceElectriqueWithoutPayload']);
+		Route::get('/get-etablissement-electrique-list', [EtablissementController::class, 'getEtablissementElectriqueList']);
 
         // Route pour afficher les alert
         Route::post('/get-alert-by-type', [AlertController::class, 'getAlertByType']);
