@@ -66,5 +66,9 @@ return [
             'model' => env('OLLAMA_MODEL', 'qwen2.5-coder:7b'),
             'timeout' => env('OLLAMA_TIMEOUT', 120),
         ],
+        'mistral' => [
+            'api_key' => env('MISTRAL_API_KEY'),
+            'model' => env('MISTRAL_MODEL', 'mistral-small-latest'),
+        ],
     ],
 ];

@@ -4,6 +4,7 @@ namespace App\Providers;
 
 use App\Services\Assistant\AnthropicClient;
 use App\Services\Assistant\Contracts\LlmClient;
+use App\Services\Assistant\MistralClient;
 use App\Services\Assistant\OllamaClient;
 use App\Services\Assistant\ToolRegistry;
 use App\Services\Assistant\Tools\SearchCampaignsTool;
@@ -26,6 +27,7 @@ class AssistantServiceProvider extends ServiceProvider
         $this->app->bind(LlmClient::class, function ($app) {
             return match (config('services.assistant.provider')) {
                 'ollama' => $app->make(OllamaClient::class),
+                'mistral' => $app->make(MistralClient::class),
                 default => $app->make(AnthropicClient::class),
             };
         });
