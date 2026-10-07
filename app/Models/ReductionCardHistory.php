@@ -43,4 +43,14 @@ class ReductionCardHistory extends Model
     {
         return $this->belongsTo(ReductionCard::class, 'reduction_card_id');
     }
+
+    public function abonnementUsager()
+    {
+        return $this->belongsTo(AbonnementUsager::class, 'abonnement_usager_id');
+    }
+
+    public function forfaitUsager()
+    {
+        return $this->belongsTo(Forfait_usager::class, 'forfait_usager_id');
+    }
 }

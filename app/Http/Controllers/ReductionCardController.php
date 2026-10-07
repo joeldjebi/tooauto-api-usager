@@ -61,6 +61,46 @@ class ReductionCardController extends Controller
         }
     }
 
+    public function historique(Request $request, ReductionCardService $reductionCardService)
+    {
+        $validated = $request->validate([
+            'establishment_type' => 'nullable|string|in:etablissement,lavage,station',
+            'card_code' => 'nullable|string|max:100',
+            'date_debut' => 'nullable|date',
+            'date_fin' => 'nullable|date|after_or_equal:date_debut',
+            'page' => 'nullable|integer|min:1',
+            'per_page' => 'nullable|integer|min:1|max:100',
+        ]);
+
+        $user = $request->user() ?: Auth::user();
+
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Utilisateur non authentifié.',
+            ], 401);
+        }
+
+        $histories = $reductionCardService->listUserReductionHistory((int) $user->id, $validated);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Historique des réductions obtenues.',
+            'data' => $histories->items(),
+            'pagination' => [
+                'current_page' => $histories->currentPage(),
+                'per_page' => $histories->perPage(),
+                'total' => $histories->total(),
+                'last_page' => $histories->lastPage(),
+                'from' => $histories->firstItem(),
+                'to' => $histories->lastItem(),
+                'has_more_pages' => $histories->hasMorePages(),
+                'next_page_url' => $histories->nextPageUrl(),
+                'prev_page_url' => $histories->previousPageUrl(),
+            ],
+        ]);
+    }
+
     public function appliquer(Request $request, ReductionCardService $reductionCardService)
     {
         $validated = $request->validate([

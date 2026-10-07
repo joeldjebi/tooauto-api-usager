@@ -93,6 +93,10 @@ L'implementation ne limite pas le nombre d'utilisations et ne passe pas automati
 
 Retourne les cartes actives et non expirees de l'usager connecte.
 
+`GET /historique-cartes-reduction`
+
+Retourne uniquement l'historique de l'usager connecte, pagine du plus recent au plus ancien. Filtres optionnels: `establishment_type`, `card_code`, `date_debut`, `date_fin`, `page` et `per_page`. Chaque ligne contient la carte, le forfait, les montants et un resume de l'etablissement. Le chemin original du logo est conserve dans `establishment.logo` et son URL Wasabi temporaire signee est retournee dans `establishment.logo_url`.
+
 `POST /verifier-carte-reduction`
 
 ```json

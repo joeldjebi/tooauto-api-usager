@@ -3,8 +3,11 @@
 namespace App\Services;
 
 use App\Models\AbonnementUsager;
+use App\Models\Etablissement;
 use App\Models\ReductionCard;
 use App\Models\ReductionCardHistory;
+use App\Models\Station_service;
+use App\Models\StationDeLavage;
 use App\Models\UserReductionCard;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -13,6 +16,10 @@ use RuntimeException;
 
 class ReductionCardService
 {
+    public function __construct(private WasabiService $wasabiService)
+    {
+    }
+
     public function assignCardsToSubscription(AbonnementUsager $abonnement): int
     {
         $cards = ReductionCard::where('forfait_usager_id', $abonnement->forfait_id)
@@ -76,6 +83,45 @@ class ReductionCardService
                 'discount_value' => $this->discountValue($userCard->reductionCard),
             ],
         ];
+    }
+
+    public function listUserReductionHistory(int $userId, array $filters)
+    {
+        $perPage = max(1, min((int) ($filters['per_page'] ?? 15), 100));
+
+        $histories = ReductionCardHistory::with([
+                'userReductionCard',
+                'reductionCard',
+                'forfaitUsager',
+                'abonnementUsager',
+            ])
+            ->where('user_id', $userId)
+            ->when(!empty($filters['establishment_type']), function ($query) use ($filters) {
+                $query->where('establishment_type', $filters['establishment_type']);
+            })
+            ->when(!empty($filters['date_debut']), function ($query) use ($filters) {
+                $query->whereDate('used_at', '>=', $filters['date_debut']);
+            })
+            ->when(!empty($filters['date_fin']), function ($query) use ($filters) {
+                $query->whereDate('used_at', '<=', $filters['date_fin']);
+            })
+            ->when(!empty($filters['card_code']), function ($query) use ($filters) {
+                $query->whereHas('userReductionCard', function ($query) use ($filters) {
+                    $query->where('card_code', trim($filters['card_code']));
+                });
+            })
+            ->orderByDesc('used_at')
+            ->orderByDesc('id')
+            ->paginate($perPage)
+            ->appends($filters);
+
+        $establishments = $this->loadHistoryEstablishments($histories->getCollection());
+
+        $histories->getCollection()->transform(function (ReductionCardHistory $history) use ($establishments) {
+            return $this->formatReductionHistory($history, $establishments);
+        });
+
+        return $histories;
     }
 
     public function applyDiscount(int $userId, array $data): array
@@ -213,6 +259,92 @@ class ReductionCardService
                 'duree' => $forfait->duree ?? null,
             ] : null,
         ];
+    }
+
+    private function loadHistoryEstablishments($histories): array
+    {
+        $idsByType = $histories
+            ->groupBy('establishment_type')
+            ->map(function ($items) {
+                return $items->pluck('establishment_id')->filter()->unique()->values()->all();
+            });
+
+        return [
+            'etablissement' => Etablissement::whereIn('id', $idsByType->get('etablissement', []))
+                ->get()
+                ->keyBy('id'),
+            'lavage' => StationDeLavage::whereIn('id', $idsByType->get('lavage', []))
+                ->get()
+                ->keyBy('id'),
+            'station' => Station_service::whereIn('id', $idsByType->get('station', []))
+                ->get()
+                ->keyBy('id'),
+        ];
+    }
+
+    private function formatReductionHistory(ReductionCardHistory $history, array $establishments): array
+    {
+        $userCard = $history->userReductionCard;
+        $card = $history->reductionCard;
+        $forfait = $history->forfaitUsager;
+        $establishment = $establishments[$history->establishment_type]->get($history->establishment_id);
+
+        return [
+            'id' => $history->id,
+            'discount_type' => $history->discount_type,
+            'discount_value' => (float) $history->discount_value,
+            'montant_initial' => (float) $history->montant_initial,
+            'montant_reduction' => (float) $history->montant_reduction,
+            'montant_final' => (float) $history->montant_final,
+            'notes' => $history->notes,
+            'used_at' => optional($history->used_at)->toDateTimeString(),
+            'carte' => [
+                'id' => $userCard->id ?? null,
+                'reduction_card_id' => $history->reduction_card_id,
+                'nom' => $card->name ?? $card->nom ?? null,
+                'card_code' => $userCard->card_code ?? null,
+                'qr_code' => $userCard->qr_code ?? null,
+            ],
+            'forfait' => $forfait ? [
+                'id' => $forfait->id,
+                'libelle' => $forfait->libelle ?? null,
+            ] : null,
+            'abonnement_usager_id' => $history->abonnement_usager_id,
+            'establishment_type' => $history->establishment_type,
+            'establishment_id' => $history->establishment_id,
+            'establishment' => $this->formatHistoryEstablishment($establishment),
+        ];
+    }
+
+    private function formatHistoryEstablishment($establishment): ?array
+    {
+        if (!$establishment) {
+            return null;
+        }
+
+        $logo = $establishment->logo ?? null;
+
+        return [
+            'id' => $establishment->id,
+            'name' => $establishment->name ?? $establishment->nom ?? null,
+            'adresse' => $establishment->adresse ?? $establishment->adresse_map ?? null,
+            'contact' => $establishment->contact ?? $establishment->mobile ?? $establishment->telephone ?? null,
+            'logo' => $logo,
+            'logo_url' => $this->signedWasabiUrl($logo),
+        ];
+    }
+
+    private function signedWasabiUrl(?string $path): ?string
+    {
+        if (!$path) {
+            return null;
+        }
+
+        try {
+            return $this->wasabiService->temporaryUrl($path);
+        } catch (\Throwable $exception) {
+            return null;
+        }
     }
 
     private function discountType(?ReductionCard $card): ?string
