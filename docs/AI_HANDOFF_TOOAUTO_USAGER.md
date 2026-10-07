@@ -286,3 +286,9 @@ L'environnement local peut ne pas avoir acces a la base de production. Dans ce c
 - Centraliser le format de pagination si d'autres controleurs adoptent le meme contrat.
 - Definir une strategie de synchronisation ou une base partagee pour `reduction_campaigns` entre les API Lavage et Usager.
 - Clarifier si toute URL Wasabi deja stockee doit etre re-signee a chaque reponse.
+
+## 9. Colonnes promotionnelles des paiements
+
+`PaiementController::storePaiement()` calcule le montant depuis `forfait_usagers.prix` et non depuis le champ `amount` fourni par le client. Il enregistre ensuite `code_promo_id`, `montant_initial`, `montant_reduction` et `montant_final` dans `paiements`.
+
+La migration corrective `2026_10_07_000001_repair_promo_columns_on_paiements_table.php` ajoute uniquement les colonnes manquantes. Elle couvre les bases ou l'ancienne migration promo est deja marquee comme executee avec un schema incomplet. Son rollback est volontairement vide pour ne pas supprimer de donnees de paiement en production.
