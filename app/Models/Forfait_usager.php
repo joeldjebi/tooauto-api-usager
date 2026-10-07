@@ -13,6 +13,9 @@ class Forfait_usager extends Model
 
     protected $casts = [
         'nombre_vehicule' => 'integer',
+        'prix' => 'integer',
+        'reduction' => 'decimal:2',
+        'montant_apres_reduction' => 'decimal:2',
     ];
 
     public function avantageUsager()

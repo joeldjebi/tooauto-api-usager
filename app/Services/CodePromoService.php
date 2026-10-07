@@ -15,27 +15,70 @@ class CodePromoService
 {
     public function quote(?string $code, Forfait_usager $forfait, int $userId): array
     {
-        $montantInitial = (float) $forfait->prix;
+        $montantInitial = round(max(0, (float) $forfait->prix), 2);
+        $montantApresReductionForfait = $this->forfaitDiscountedAmount($forfait, $montantInitial);
+        $montantReductionForfait = round($montantInitial - $montantApresReductionForfait, 2);
 
         if (empty($code)) {
             return [
                 'code_promo' => null,
                 'montant_initial' => $montantInitial,
-                'montant_reduction' => 0,
-                'montant_final' => $montantInitial,
+                'montant_reduction_forfait' => $montantReductionForfait,
+                'montant_apres_reduction_forfait' => $montantApresReductionForfait,
+                'montant_reduction_code_promo' => 0,
+                'montant_reduction' => $montantReductionForfait,
+                'montant_final' => $montantApresReductionForfait,
             ];
         }
 
         $codePromo = $this->getValidCode($code, $forfait, $userId);
-        $montantReduction = round(($montantInitial * (float) $codePromo->pourcentage) / 100, 2);
-        $montantFinal = max(0, $montantInitial - $montantReduction);
+        $montantReductionCodePromo = round(
+            ($montantApresReductionForfait * (float) $codePromo->pourcentage) / 100,
+            2
+        );
+        $montantReductionCodePromo = min($montantReductionCodePromo, $montantApresReductionForfait);
+        $montantFinal = round(max(0, $montantApresReductionForfait - $montantReductionCodePromo), 2);
+        $montantReduction = round($montantInitial - $montantFinal, 2);
 
         return [
             'code_promo' => $codePromo,
             'montant_initial' => $montantInitial,
+            'montant_reduction_forfait' => $montantReductionForfait,
+            'montant_apres_reduction_forfait' => $montantApresReductionForfait,
+            'montant_reduction_code_promo' => $montantReductionCodePromo,
             'montant_reduction' => $montantReduction,
             'montant_final' => $montantFinal,
         ];
+    }
+
+    private function forfaitDiscountedAmount(Forfait_usager $forfait, float $montantInitial): float
+    {
+        $reduction = max(0, (float) $forfait->reduction);
+
+        if ($reduction <= 0 || $montantInitial <= 0) {
+            return $montantInitial;
+        }
+
+        $type = Str::lower(trim((string) $forfait->reduction_type));
+
+        if ($type === 'percentage') {
+            $montantCalcule = $montantInitial - (($montantInitial * min($reduction, 100)) / 100);
+        } elseif ($type === 'fixed') {
+            $montantCalcule = $montantInitial - min($reduction, $montantInitial);
+        } else {
+            $montantCalcule = $montantInitial;
+        }
+
+        $montantConfigure = $forfait->montant_apres_reduction;
+        if ($montantConfigure !== null) {
+            $montantConfigure = (float) $montantConfigure;
+
+            if ($montantConfigure > 0 && $montantConfigure <= $montantInitial) {
+                return round($montantConfigure, 2);
+            }
+        }
+
+        return round(max(0, $montantCalcule), 2);
     }
 
     public function getValidCode(string $code, Forfait_usager $forfait, int $userId): CodePromo

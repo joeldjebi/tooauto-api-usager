@@ -837,6 +837,9 @@ class PaiementController extends Controller
 			'pourcentage' => (float) $codePromo->pourcentage,
 			'partenaire' => optional($codePromo->partenaire)->nom,
 			'montant_initial' => $quote['montant_initial'],
+			'montant_reduction_forfait' => $quote['montant_reduction_forfait'],
+			'montant_apres_reduction_forfait' => $quote['montant_apres_reduction_forfait'],
+			'montant_reduction_code_promo' => $quote['montant_reduction_code_promo'],
 			'montant_reduction' => $quote['montant_reduction'],
 			'montant_final' => $quote['montant_final'],
 		];

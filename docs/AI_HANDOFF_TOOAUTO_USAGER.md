@@ -289,6 +289,6 @@ L'environnement local peut ne pas avoir acces a la base de production. Dans ce c
 
 ## 9. Colonnes promotionnelles des paiements
 
-`PaiementController::storePaiement()` calcule le montant depuis `forfait_usagers.prix` et non depuis le champ `amount` fourni par le client. Il enregistre ensuite `code_promo_id`, `montant_initial`, `montant_reduction` et `montant_final` dans `paiements`.
+`PaiementController::storePaiement()` ne fait pas confiance au champ `amount` fourni par le client. `CodePromoService` part de `forfait_usagers.prix`, applique d'abord la reduction du forfait (`reduction_type`, `reduction`, `montant_apres_reduction`), puis applique un eventuel code promo sur le montant deja reduit. Le montant transmis a FineoPay est `montant_final`. La reduction enregistree dans `paiements.montant_reduction` est la reduction totale forfait + code promo.
 
 La migration corrective `2026_10_07_000001_repair_promo_columns_on_paiements_table.php` ajoute uniquement les colonnes manquantes. Elle couvre les bases ou l'ancienne migration promo est deja marquee comme executee avec un schema incomplet. Son rollback est volontairement vide pour ne pas supprimer de donnees de paiement en production.
