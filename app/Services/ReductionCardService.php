@@ -72,6 +72,39 @@ class ReductionCardService
             ->values();
     }
 
+    public function listUserLoyaltyCards(int $userId, array $filters)
+    {
+        $perPage = max(1, min((int) ($filters['per_page'] ?? 15), 100));
+
+        $cards = UserReductionCard::with(['reductionCard.forfaitUsager', 'forfaitUsager'])
+            ->where('user_id', $userId)
+            ->when(isset($filters['statut']), function ($query) use ($filters) {
+                $query->where('statut', (int) $filters['statut']);
+            })
+            ->when(!empty($filters['card_code']), function ($query) use ($filters) {
+                $query->where('card_code', 'like', '%' . trim($filters['card_code']) . '%');
+            })
+            ->when(!empty($filters['valid_only']), function ($query) {
+                $query->where('statut', 1)
+                    ->where(function ($query) {
+                        $query->whereNull('date_fin')
+                            ->orWhereDate('date_fin', '>=', Carbon::today());
+                    })
+                    ->whereHas('reductionCard', function ($query) {
+                        $query->where('statut', 1);
+                    });
+            })
+            ->orderByDesc('id')
+            ->paginate($perPage)
+            ->appends($filters);
+
+        $cards->getCollection()->transform(function (UserReductionCard $userCard) {
+            return $this->formatUserCard($userCard);
+        });
+
+        return $cards;
+    }
+
     public function verifyUserCard(int $userId, ?string $cardCode = null, ?string $qrCode = null): array
     {
         $userCard = $this->getValidUserCard($userId, $cardCode, $qrCode);
@@ -244,6 +277,8 @@ class ReductionCardService
         return [
             'id' => $userCard->id,
             'reduction_card_id' => $userCard->reduction_card_id,
+            'abonnement_usager_id' => $userCard->abonnement_usager_id,
+            'forfait_usager_id' => $userCard->forfait_usager_id,
             'nom' => $card->nom ?? $card->name ?? $card->libelle ?? null,
             'discount_type' => $this->discountType($card),
             'discount_value' => $this->discountValue($card),
@@ -252,12 +287,17 @@ class ReductionCardService
             'qr_code' => $userCard->qr_code,
             'date_debut' => optional($userCard->date_debut)->toDateString(),
             'date_fin' => optional($userCard->date_fin)->toDateString(),
+            'statut' => (int) $userCard->statut,
+            'est_expiree' => $userCard->date_fin
+                ? Carbon::parse($userCard->date_fin)->lt(Carbon::today())
+                : false,
             'forfait' => $forfait ? [
                 'id' => $forfait->id,
                 'libelle' => $forfait->libelle ?? $forfait->nom ?? null,
                 'prix' => $forfait->prix ?? null,
                 'duree' => $forfait->duree ?? null,
             ] : null,
+            'created_at' => optional($userCard->created_at)->toDateTimeString(),
         ];
     }
 

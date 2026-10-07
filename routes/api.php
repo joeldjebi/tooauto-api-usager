@@ -362,6 +362,7 @@ Route::prefix('v1')->group(function () {
 		Route::post('/store-paiement-free', [PaiementController::class, 'storeAbonnementGratuit']);
 		Route::post('/paiement/check-statut', [PaiementController::class, 'checkStatutPaiement']);
 		Route::get('/mes-cartes-reduction', [ReductionCardController::class, 'index']);
+		Route::get('/mes-cartes-fidelite', [ReductionCardController::class, 'cartesFidelite']);
 		Route::get('/historique-cartes-reduction', [ReductionCardController::class, 'historique']);
 		Route::post('/verifier-carte-reduction', [ReductionCardController::class, 'verifier']);
 		Route::post('/appliquer-carte-reduction', [ReductionCardController::class, 'appliquer']);

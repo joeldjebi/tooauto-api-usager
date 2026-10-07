@@ -93,6 +93,10 @@ L'implementation ne limite pas le nombre d'utilisations et ne passe pas automati
 
 Retourne les cartes actives et non expirees de l'usager connecte.
 
+`GET /mes-cartes-fidelite`
+
+Retourne toutes les attributions de `user_reduction_cards` appartenant a l'usager connecte, sans historique d'utilisation. La liste est paginee et accepte `statut`, `valid_only`, `card_code`, `page` et `per_page`. `valid_only=1` limite la reponse aux cartes actives et non expirees.
+
 `GET /historique-cartes-reduction`
 
 Retourne uniquement l'historique de l'usager connecte, pagine du plus recent au plus ancien. Filtres optionnels: `establishment_type`, `card_code`, `date_debut`, `date_fin`, `page` et `per_page`. Chaque ligne contient la carte, le forfait, les montants et un resume de l'etablissement. Le chemin original du logo est conserve dans `establishment.logo` et son URL Wasabi temporaire signee est retournee dans `establishment.logo_url`.

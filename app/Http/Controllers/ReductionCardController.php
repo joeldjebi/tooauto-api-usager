@@ -61,6 +61,35 @@ class ReductionCardController extends Controller
         }
     }
 
+    public function cartesFidelite(Request $request, ReductionCardService $reductionCardService)
+    {
+        $validated = $request->validate([
+            'statut' => 'nullable|integer|in:0,1',
+            'valid_only' => 'nullable|boolean',
+            'card_code' => 'nullable|string|max:100',
+            'page' => 'nullable|integer|min:1',
+            'per_page' => 'nullable|integer|min:1|max:100',
+        ]);
+
+        $user = $request->user() ?: Auth::user();
+
+        if (!$user) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Utilisateur non authentifié.',
+            ], 401);
+        }
+
+        $cards = $reductionCardService->listUserLoyaltyCards((int) $user->id, $validated);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Liste des cartes de fidélité.',
+            'data' => $cards->items(),
+            'pagination' => $this->paginationMeta($cards),
+        ]);
+    }
+
     public function historique(Request $request, ReductionCardService $reductionCardService)
     {
         $validated = $request->validate([
@@ -87,17 +116,7 @@ class ReductionCardController extends Controller
             'success' => true,
             'message' => 'Historique des réductions obtenues.',
             'data' => $histories->items(),
-            'pagination' => [
-                'current_page' => $histories->currentPage(),
-                'per_page' => $histories->perPage(),
-                'total' => $histories->total(),
-                'last_page' => $histories->lastPage(),
-                'from' => $histories->firstItem(),
-                'to' => $histories->lastItem(),
-                'has_more_pages' => $histories->hasMorePages(),
-                'next_page_url' => $histories->nextPageUrl(),
-                'prev_page_url' => $histories->previousPageUrl(),
-            ],
+            'pagination' => $this->paginationMeta($histories),
         ]);
     }
 
@@ -134,5 +153,20 @@ class ReductionCardController extends Controller
                 'message' => $e->getMessage(),
             ], 422);
         }
+    }
+
+    private function paginationMeta($paginator): array
+    {
+        return [
+            'current_page' => $paginator->currentPage(),
+            'per_page' => $paginator->perPage(),
+            'total' => $paginator->total(),
+            'last_page' => $paginator->lastPage(),
+            'from' => $paginator->firstItem(),
+            'to' => $paginator->lastItem(),
+            'has_more_pages' => $paginator->hasMorePages(),
+            'next_page_url' => $paginator->nextPageUrl(),
+            'prev_page_url' => $paginator->previousPageUrl(),
+        ];
     }
 }
