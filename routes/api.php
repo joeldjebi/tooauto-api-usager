@@ -23,6 +23,7 @@ use App\Http\Controllers\CodePromoController;
 use App\Http\Controllers\ReductionCardController;
 use App\Http\Controllers\API\UserCampaignController;
 use App\Http\Controllers\API\AssistantController;
+use App\Http\Controllers\API\UserLoyaltyCardController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\EntrepriseAssuranceController;
 use App\Http\Controllers\NotationController;
@@ -364,6 +365,7 @@ Route::prefix('v1')->group(function () {
 		Route::get('/mes-cartes-reduction', [ReductionCardController::class, 'index']);
 		Route::get('/mes-cartes-fidelite', [ReductionCardController::class, 'cartesFidelite']);
 		Route::get('/historique-cartes-reduction', [ReductionCardController::class, 'historique']);
+		Route::get('/usager/cartes-fidelite', [UserLoyaltyCardController::class, 'index']);
 		Route::post('/verifier-carte-reduction', [ReductionCardController::class, 'verifier']);
 		Route::post('/appliquer-carte-reduction', [ReductionCardController::class, 'appliquer']);
 		Route::prefix('usager/campaigns')->group(function () {

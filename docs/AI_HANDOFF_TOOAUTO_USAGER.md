@@ -97,6 +97,10 @@ Retourne les cartes actives et non expirees de l'usager connecte.
 
 Retourne toutes les attributions de `user_reduction_cards` appartenant a l'usager connecte, sans historique d'utilisation. La liste est paginee et accepte `statut`, `valid_only`, `card_code`, `page` et `per_page`. `valid_only=1` limite la reponse aux cartes actives et non expirees.
 
+`GET /usager/cartes-fidelite`
+
+Retourne les cartes de lavage de `fidelites` appartenant a l'usager connecte (`usager_id`), y compris les cartes completees, avec leurs passages les plus recents en premier. Filtres: `matricule_vehicule`, `lavage_id`, `statut`. Les informations de `lavages`, `station_de_lavages` et `type_lavages` sont chargees en requetes groupees. La route n'accepte aucun identifiant d'usager du client et ne modifie pas le projet lavage.
+
 `GET /historique-cartes-reduction`
 
 Retourne uniquement l'historique de l'usager connecte, pagine du plus recent au plus ancien. Filtres optionnels: `establishment_type`, `card_code`, `date_debut`, `date_fin`, `page` et `per_page`. Chaque ligne contient la carte, le forfait, les montants et un resume de l'etablissement. Le chemin original du logo est conserve dans `establishment.logo` et son URL Wasabi temporaire signee est retournee dans `establishment.logo_url`.
