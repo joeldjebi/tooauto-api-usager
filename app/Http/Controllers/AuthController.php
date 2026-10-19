@@ -1038,49 +1038,12 @@ class AuthController extends Controller
      *
      * @param string $message Le message à envoyer
      * @param string $msisdn Le numéro de téléphone du destinataire (format: +2250758754662)
-     * @param string $sender L'expéditeur du SMS (par défaut: TOO AUTO)
+     * @param string|null $sender L'expéditeur du SMS (par défaut: configuration MTarget)
      * @return string|false La réponse de l'API ou false en cas d'erreur
      */
-    function sendSmsMtarget($message, $msisdn, $sender = 'TOO AUTO')
+    function sendSmsMtarget($message, $msisdn, $sender = null)
     {
         return $this->smsService->sendSmsMtarget($message, $msisdn, $sender);
-    }
-
-    /**
-     * Méthode de test pour envoyer un SMS via l'API MTarget
-     *
-     * @param Request $request
-     * @return \Illuminate\Http\JsonResponse
-     */
-    public function testSendSmsMtarget(Request $request)
-    {
-        try {
-            // Paramètres par défaut basés sur votre exemple cURL
-            $message = $request->input('message', 'Message test demo');
-            $msisdn = $request->input('msisdn', '+2250758754662');
-            $sender = $request->input('sender', 'TOO AUTO');
-
-            // Appel de la fonction d'envoi SMS
-            $response = $this->smsService->sendSmsMtarget($message, $msisdn, $sender);
-
-            return response()->json([
-                'success' => true,
-                'message' => 'SMS envoyé avec succès',
-                'response' => $response,
-                'parameters' => [
-                    'message' => $message,
-                    'msisdn' => $msisdn,
-                    'sender' => $sender
-                ]
-            ], 200);
-
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Erreur lors de l\'envoi du SMS',
-                'error' => $e->getMessage()
-            ], 500);
-        }
     }
 
     /**

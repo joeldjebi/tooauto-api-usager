@@ -33,11 +33,12 @@ return [
 
     'mtarget' => [
         'url' => env('MTARGET_URL', 'https://api-public-2.mtarget.fr/messages'),
-        'username' => env('MTARGET_USERNAME', 'bwantech'),
-        'password' => env('MTARGET_PASSWORD', 'x7jyKG0IJRNH'),
-        'sender' => env('MTARGET_SENDER', 'TOO AUTO'),
+        'username' => env('MTARGET_USERNAME'),
+        'password' => env('MTARGET_PASSWORD'),
+        'sender' => env('MTARGET_SENDER', 'TOOAUTO'),
         'timeout' => env('MTARGET_TIMEOUT', 30),
-        'verify_ssl' => env('MTARGET_VERIFY_SSL', false),
+        'verify_ssl' => env('MTARGET_VERIFY_SSL', true),
+        'dlr_token' => env('MTARGET_DLR_TOKEN'),
     ],
 
     'fineopay' => [

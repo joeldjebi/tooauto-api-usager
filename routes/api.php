@@ -24,6 +24,7 @@ use App\Http\Controllers\ReductionCardController;
 use App\Http\Controllers\API\UserCampaignController;
 use App\Http\Controllers\API\AssistantController;
 use App\Http\Controllers\API\UserLoyaltyCardController;
+use App\Http\Controllers\SmsTestController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\EntrepriseAssuranceController;
 use App\Http\Controllers\NotationController;
@@ -59,6 +60,11 @@ Route::prefix('v1')->group(function () {
 
     // Callback public FineoPay
     Route::post('fineopay/callback', [PaiementController::class, 'fineoPayCallback']);
+
+    // Accusés de réception DLR du fournisseur SMS (protégé par un token secret dans l'URL)
+    Route::post('webhooks/mtarget/dlr/{token}', [SmsTestController::class, 'deliveryReport'])
+        ->where('token', '[A-Za-z0-9]{32,128}')
+        ->name('mtarget.dlr');
 
     // Routes protégées par le middleware d'authentification
     Route::middleware('auth.multiple')->group(function () {
@@ -398,6 +404,13 @@ Route::prefix('v1')->group(function () {
     Route::post('login', [AuthController::class, 'login']);
     Route::post('login-pro', [AuthController::class, 'loginPro']);
 
+    // Routes publiques de test et de suivi SMS MTarget
+    Route::post('test-sms-mtarget', [SmsTestController::class, 'send'])->middleware('throttle:3,1');
+    Route::get('test-sms-mtarget/{ticket}', [SmsTestController::class, 'status'])
+        ->middleware('throttle:30,1')
+        ->where('ticket', '[A-Za-z0-9-]{1,128}')
+        ->name('mtarget.test.status');
+
     // Route pour verifier si le numero de telephone existe
     Route::post('otp-register', [AuthController::class, 'sendOtpForRegister']);
 
@@ -415,9 +428,6 @@ Route::prefix('v1')->group(function () {
 
     // Route pour mettre a jour le mot de passe oublié
     Route::post('update-password-forget-pro', [AuthController::class, 'passwordForgetUpdatePro']);
-
-    // Route de test pour l'envoi SMS via MTarget
-    Route::post('test-sms-mtarget', [AuthController::class, 'testSendSmsMtarget']);
 
     // Route pour les categorie par livre
     Route::post('/get-pays-all', function () {
