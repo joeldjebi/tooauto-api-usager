@@ -97,18 +97,64 @@ class EtablissementController extends Controller
     }*/
 		public function index(Request $request)
 		{
+			$validator = Validator::make($request->all(), [
+				'latitude' => 'nullable|numeric|between:-90,90|required_with:longitude',
+				'longitude' => 'nullable|numeric|between:-180,180|required_with:latitude',
+				'rayon' => 'nullable|numeric|min:1|max:500',
+				'per_page' => 'nullable|integer|min:1|max:100',
+				'page' => 'nullable|integer|min:1',
+			]);
+
+			if ($validator->fails()) {
+				return response()->json([
+					'success' => false,
+					'message' => 'Les données fournies ne sont pas valides.',
+					'errors' => $validator->errors(),
+				], 422);
+			}
+
 			$perPage = $this->resolvePerPage($request);
+			$withDistance = $request->filled('latitude') && $request->filled('longitude');
+			$rayonKm = (float) $request->input('rayon', 50);
+
+			$query = Etablissement::query()->select('etablissements.*');
+
+			if ($withDistance) {
+				$latitude = (float) $request->latitude;
+				$longitude = (float) $request->longitude;
+
+				// Zone carrée autour de l'utilisateur (utilise l'index etablissements_lat_lng_index)
+				$deltaLat = $rayonKm / 111.045;
+				$deltaLng = $rayonKm / (111.045 * max(cos(deg2rad($latitude)), 0.01));
+
+				// Distance exacte en mètres (Haversine)
+				$distanceSql = '6371000 * acos(LEAST(1, GREATEST(-1,
+					cos(radians(?)) * cos(radians(latitude)) * cos(radians(longitude) - radians(?)) +
+					sin(radians(?)) * sin(radians(latitude))
+				)))';
+				$distanceBindings = [$latitude, $longitude, $latitude];
+
+				$query->selectRaw("{$distanceSql} AS distance", $distanceBindings)
+					->whereBetween('latitude', [$latitude - $deltaLat, $latitude + $deltaLat])
+					->whereBetween('longitude', [$longitude - $deltaLng, $longitude + $deltaLng])
+					->whereRaw("{$distanceSql} <= ?", array_merge($distanceBindings, [$rayonKm * 1000]))
+					->orderBy('distance')
+					->orderBy('etablissements.id');
+			} else {
+				$query->orderBy('id', 'desc');
+			}
 
 			// Récupérer les établissements avec la moyenne des notes
-			$etablissements = Etablissement::withAvg('notations as moyenne_note', 'note')
-				->orderBy('id', 'desc')
+			$etablissements = $query->withAvg('notations as moyenne_note', 'note')
 				->paginate($perPage);
-	
+
 			// Vérifier si des établissements existent
 			if ($etablissements->getCollection()->isEmpty()) {
 				return response()->json([
 					'success' => false,
-					'message' => 'Aucun établissement enregistré pour le moment.',
+					'message' => $withDistance
+						? "Aucun établissement trouvé dans un rayon de {$rayonKm} km."
+						: 'Aucun établissement enregistré pour le moment.',
 			], 404);
 		}
 
@@ -116,12 +162,20 @@ class EtablissementController extends Controller
 			$allTypesPrestations = TypeDePrestation::all()->keyBy('id');
 	
 			// Transformer les données
-			$etablissements->getCollection()->transform(function ($etablissement) use ($allTypesPrestations) {
+			$etablissements->getCollection()->transform(function ($etablissement) use ($allTypesPrestations, $withDistance) {
 
 			// ✅ Moyenne des notes (toujours float)
 			$etablissement->moyenne_note = $etablissement->moyenne_note !== null
 				? (float) round($etablissement->moyenne_note, 1)
 				: 0.0;
+
+			// Distance (mètres + libellé lisible)
+			if ($withDistance) {
+				$etablissement->distance = $etablissement->distance !== null
+					? (int) round($etablissement->distance)
+					: null;
+				$etablissement->distance_label = $this->formatDistance($etablissement->distance);
+			}
 
 			// Libellés des types de prestations
 			$etablissement->types_prestations_libelles = $this->getTypesPrestationsLibelles(
@@ -149,7 +203,10 @@ class EtablissementController extends Controller
 		// Retour JSON
 		return response()->json([
 				'success' => true,
-				'message' => 'Liste des établissements.',
+				'message' => $withDistance
+					? 'Liste des établissements triée par proximité.'
+					: 'Liste des établissements.',
+				'rayon_km' => $withDistance ? $rayonKm : null,
 				'etablissements' => $etablissements->items(),
 				'pagination' => $this->paginationMeta($etablissements),
 			], 200);
@@ -1731,6 +1788,30 @@ class EtablissementController extends Controller
 			'station_de_lavages' => $stations->items(),
 			'pagination' => $this->paginationMeta($stations),
 		], 200);
+	}
+
+	/**
+	 * Formater une distance en mètres : "20 m", "850 m", "1,2 km", "3 km", "15 km"
+	 */
+	private function formatDistance(?int $meters): ?string
+	{
+		if ($meters === null) {
+			return null;
+		}
+
+		$roundedMeters = max(10, (int) round($meters, -1));
+
+		if ($roundedMeters < 1000) {
+			return $roundedMeters . ' m';
+		}
+
+		$km = $meters / 1000;
+
+		if ($km < 10) {
+			return str_replace('.', ',', (string) round($km, 1)) . ' km';
+		}
+
+		return (int) round($km) . ' km';
 	}
 
 	private function resolvePerPage(Request $request): int
