@@ -31,6 +31,13 @@ class Etablissement extends Model
         'updated_at'
     ];
 
+    // Données internes du call center, jamais renvoyées aux usagers
+    protected $hidden = [
+        'call_center_deja_appele',
+        'call_center_commentaire',
+        'call_center_called_at',
+    ];
+
     protected $casts = [
         'latitude' => 'decimal:8',
         'longitude' => 'decimal:8',

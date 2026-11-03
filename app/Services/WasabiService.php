@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
@@ -61,9 +62,18 @@ class WasabiService
             return null;
         }
 
-        return $this->disk()->temporaryUrl(
-            $path,
-            now()->addMinutes($expirationMinutes)
+        // URL signée mise en cache jusqu'à 1 jour avant son expiration :
+        // évite de re-signer à chaque requête et garde une URL stable (cache d'images côté mobile)
+        $cacheMinutes = (int) floor($expirationMinutes * 6 / 7);
+
+        if ($cacheMinutes < 1) {
+            return $this->disk()->temporaryUrl($path, now()->addMinutes($expirationMinutes));
+        }
+
+        return Cache::remember(
+            'wasabi_url:' . md5($path . '|' . $expirationMinutes),
+            now()->addMinutes($cacheMinutes),
+            fn () => $this->disk()->temporaryUrl($path, now()->addMinutes($expirationMinutes))
         );
     }
 

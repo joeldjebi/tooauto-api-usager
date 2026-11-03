@@ -22,6 +22,13 @@ class StationDeLavage extends Model
         'call_center_called_at',
     ];
 
+    // Données internes du call center, jamais renvoyées aux usagers
+    protected $hidden = [
+        'call_center_deja_appele',
+        'call_center_commentaire',
+        'call_center_called_at',
+    ];
+
     protected $casts = [
         'statut' => 'integer',
         'call_center_deja_appele' => 'boolean',
