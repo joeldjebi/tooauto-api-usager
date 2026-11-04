@@ -120,26 +120,7 @@ class EtablissementController extends Controller
 			$query = Etablissement::query()->select('etablissements.*');
 
 			if ($withDistance) {
-				$latitude = (float) $request->latitude;
-				$longitude = (float) $request->longitude;
-
-				// Zone carrée autour de l'utilisateur (utilise l'index etablissements_lat_lng_index)
-				$deltaLat = $rayonKm / 111.045;
-				$deltaLng = $rayonKm / (111.045 * max(cos(deg2rad($latitude)), 0.01));
-
-				// Distance exacte en mètres (Haversine)
-				$distanceSql = '6371000 * acos(LEAST(1, GREATEST(-1,
-					cos(radians(?)) * cos(radians(latitude)) * cos(radians(longitude) - radians(?)) +
-					sin(radians(?)) * sin(radians(latitude))
-				)))';
-				$distanceBindings = [$latitude, $longitude, $latitude];
-
-				$query->selectRaw("{$distanceSql} AS distance", $distanceBindings)
-					->whereBetween('latitude', [$latitude - $deltaLat, $latitude + $deltaLat])
-					->whereBetween('longitude', [$longitude - $deltaLng, $longitude + $deltaLng])
-					->whereRaw("{$distanceSql} <= ?", array_merge($distanceBindings, [$rayonKm * 1000]))
-					->orderBy('distance')
-					->orderBy('etablissements.id');
+				$this->applyProximity($query, (float) $request->latitude, (float) $request->longitude, $rayonKm);
 			} else {
 				$query->orderBy('id', 'desc');
 			}
@@ -171,10 +152,7 @@ class EtablissementController extends Controller
 
 			// Distance (mètres + libellé lisible)
 			if ($withDistance) {
-				$etablissement->distance = $etablissement->distance !== null
-					? (int) round($etablissement->distance)
-					: null;
-				$etablissement->distance_label = $this->formatDistance($etablissement->distance);
+				$etablissement = $this->attachDistance($etablissement);
 			}
 
 			// Libellés des types de prestations
@@ -1670,6 +1648,9 @@ class EtablissementController extends Controller
         // Validation des données d'entrée
 	        $validator = Validator::make($request->all(), [
 	            'type_de_prestation_id' => 'required|exists:type_de_prestations,id',
+	            'latitude' => 'nullable|numeric|between:-90,90|required_with:longitude',
+	            'longitude' => 'nullable|numeric|between:-180,180|required_with:latitude',
+	            'rayon' => 'nullable|numeric|min:1|max:500',
 	            'per_page' => 'nullable|integer|min:1|max:100',
 	            'page' => 'nullable|integer|min:1',
 	        ]);
@@ -1683,19 +1664,30 @@ class EtablissementController extends Controller
         }
 
 	        $perPage = $this->resolvePerPage($request);
+	        $withDistance = $request->filled('latitude') && $request->filled('longitude');
+	        $rayonKm = (float) $request->input('rayon', 50);
 
 	        // Récupérer les établissements avec des données JSON valides
-	        $etablissements = Etablissement::whereNotNull('type_de_prestations')
+	        $query = Etablissement::query()->select('etablissements.*')
+	            ->whereNotNull('type_de_prestations')
 	            ->whereRaw('JSON_VALID(type_de_prestations)')
-	            ->whereJsonContains('type_de_prestations', $request->type_de_prestation_id)
-	            ->orderBy('id', 'desc')
-	            ->paginate($perPage);
-	
+	            ->whereJsonContains('type_de_prestations', (int) $request->type_de_prestation_id);
+
+	        if ($withDistance) {
+	            $this->applyProximity($query, (float) $request->latitude, (float) $request->longitude, $rayonKm);
+	        } else {
+	            $query->orderBy('id', 'desc');
+	        }
+
+	        $etablissements = $query->paginate($perPage);
+
 	        // Vérifier si des établissements existent
 	        if ($etablissements->getCollection()->isEmpty()) {
 	            return response()->json([
 	                'success' => false,
-	                'message' => 'Aucun établissement enregistré pour ce type de prestation.',
+	                'message' => $withDistance
+	                    ? "Aucun établissement trouvé pour ce type de prestation dans un rayon de {$rayonKm} km."
+	                    : 'Aucun établissement enregistré pour ce type de prestation.',
             ], 404);
         }
 
@@ -1703,7 +1695,11 @@ class EtablissementController extends Controller
 	        $allTypesPrestations = TypeDePrestation::all()->keyBy('id');
 	
 	        // Ajouter les libellés des types de prestations à chaque établissement
-	        $etablissements->getCollection()->transform(function ($etablissement) use ($allTypesPrestations) {
+	        $etablissements->getCollection()->transform(function ($etablissement) use ($allTypesPrestations, $withDistance) {
+	            if ($withDistance) {
+	                $etablissement = $this->attachDistance($etablissement);
+	            }
+
 	            $etablissement->types_prestations_libelles = $this->getTypesPrestationsLibelles($etablissement->type_de_prestations, $allTypesPrestations);
 	            $etablissement->types_prestations_complets = $this->getTypesPrestationsComplets($etablissement->type_de_prestations, $allTypesPrestations);
 	            $etablissement = $this->attachEtablissementMediaUrls($etablissement);
@@ -1711,15 +1707,16 @@ class EtablissementController extends Controller
 	            return $etablissement->toArray();
         });
 
-        // Récupérer le libelle du type de prestation recherché
-        $typeDePrestation = TypeDePrestation::select('id', 'libelle')
-            ->where('id', $request->type_de_prestation_id)
-            ->first();
+        // Libelle du type de prestation recherché (déjà chargé)
+        $typeDePrestation = $allTypesPrestations->get($request->type_de_prestation_id);
 
         // Retourner la liste des établissements avec le libelle
         return response()->json([
             'success' => true,
-	            'message' => 'Liste des établissements trouvés.',
+	            'message' => $withDistance
+	                ? 'Liste des établissements trouvés, triée par proximité.'
+	                : 'Liste des établissements trouvés.',
+	            'rayon_km' => $withDistance ? $rayonKm : null,
 	            'type_de_prestation_libelle' => $typeDePrestation ? $typeDePrestation->libelle : null,
 	            'etablissement_by_type_de_prestation' => $etablissements->items(),
 	            'pagination' => $this->paginationMeta($etablissements),
@@ -1788,6 +1785,44 @@ class EtablissementController extends Controller
 			'station_de_lavages' => $stations->items(),
 			'pagination' => $this->paginationMeta($stations),
 		], 200);
+	}
+
+	/**
+	 * Limiter aux établissements dans un rayon (km) autour d'une position, triés du plus proche au plus éloigné.
+	 * Ajoute la colonne "distance" (en mètres).
+	 */
+	private function applyProximity($query, float $latitude, float $longitude, float $rayonKm): void
+	{
+		// Zone carrée autour de l'utilisateur (utilise l'index etablissements_lat_lng_index)
+		$deltaLat = $rayonKm / 111.045;
+		$deltaLng = $rayonKm / (111.045 * max(cos(deg2rad($latitude)), 0.01));
+
+		// Distance exacte en mètres (Haversine)
+		$distanceSql = '6371000 * acos(LEAST(1, GREATEST(-1,
+			cos(radians(?)) * cos(radians(etablissements.latitude)) * cos(radians(etablissements.longitude) - radians(?)) +
+			sin(radians(?)) * sin(radians(etablissements.latitude))
+		)))';
+		$distanceBindings = [$latitude, $longitude, $latitude];
+
+		$query->selectRaw("{$distanceSql} AS distance", $distanceBindings)
+			->whereBetween('etablissements.latitude', [$latitude - $deltaLat, $latitude + $deltaLat])
+			->whereBetween('etablissements.longitude', [$longitude - $deltaLng, $longitude + $deltaLng])
+			->whereRaw("{$distanceSql} <= ?", array_merge($distanceBindings, [$rayonKm * 1000]))
+			->orderBy('distance')
+			->orderBy('etablissements.id');
+	}
+
+	/**
+	 * Ajouter "distance" (mètres, entier) et "distance_label" à un établissement
+	 */
+	private function attachDistance($etablissement)
+	{
+		$etablissement->distance = $etablissement->distance !== null
+			? (int) round($etablissement->distance)
+			: null;
+		$etablissement->distance_label = $this->formatDistance($etablissement->distance);
+
+		return $etablissement;
 	}
 
 	/**
